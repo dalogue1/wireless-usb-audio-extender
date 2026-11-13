@@ -1,5 +1,7 @@
 # Adaptive Noise Filter: Technical Basis
 
+[← Back to the noise filter](noise-filter.md) · [Main page](../README.md)
+
 *The established methods behind the Wireless USB Audio Extender's noise filter. dalogue1, October 2026; updated November 2026.*
 
 The adaptive noise filter is not a new algorithm. It is a fixed-point, microcontroller-sized implementation of two well-established speech-enhancement techniques: **spectral subtraction with a spectral floor**, driven by a **minimum-statistics noise estimate**. This page names each technique, says where it comes from, and explains how the filter uses or simplifies it. How the filter is built into the remote board is described in [noise-filter-technical.md](noise-filter-technical.md).

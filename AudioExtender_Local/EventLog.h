@@ -82,7 +82,7 @@ constexpr int16_t kTempNone = -32768;
 constexpr uint32_t kSectorSize = 4096;
 constexpr uint32_t kRecSize = 16;
 constexpr uint32_t kPerSector = kSectorSize / kRecSize;  // incl. the SECTOR record
-constexpr size_t kMaxText = 159;  // a remote log line (160-byte packet, minus its NUL) fits whole
+constexpr size_t kMaxText = 255;  // a remote log line joined from its pieces fits whole (length in a8)
 
 struct __attribute__((packed)) Rec {
     uint8_t code;

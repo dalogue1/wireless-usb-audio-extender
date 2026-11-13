@@ -5,7 +5,8 @@
 // hardware PDM-to-PCM filter delivers 48 kHz 16-bit samples, so no software decimation.
 // Both PDM slots are read: the microphone answers on one of them (its SELECT pin), and the
 // first half second picks the slot with the signal. A digital gain (config.txt mic_level,
-// 0..100 % = 0..+30 dB, default +12 dB) brings the capsule up to a usable level.
+// 0..100 % = 0..+30 dB, default 100 = +30 dB; x24 = +27.6 dB was right on this mic in the
+// esp32-birdnet-mic project) brings the capsule up to a usable level.
 // read() hands out left-aligned int32 samples, like usbmic::read(), so the audio path is the
 // same for both boards.
 #include <Arduino.h>
@@ -18,14 +19,14 @@
 namespace pdmmic {
 
 constexpr float kMaxGainDb = 30.0f;
-constexpr float kDefaultGainDb = 12.0f;  // mic_level = default
+constexpr float kDefaultGainDb = 30.0f;  // mic_level = adapter (kLevelDefault): nothing to leave alone, so the default
 
 inline i2s_chan_handle_t& chan() { static i2s_chan_handle_t h = nullptr; return h; }
 inline std::atomic<bool>& runningFlag() { static std::atomic<bool> r{false}; return r; }
 inline std::atomic<int32_t>& gainQ12() { static std::atomic<int32_t> g{4096}; return g; }  // x4096
 inline std::atomic<int16_t>& gainDb256() { static std::atomic<int16_t> g{0}; return g; }
 
-// mic_level: 0..100 % of 0..+30 dB, or wlink::kLevelDefault (+12 dB).
+// mic_level: 0..100 % of 0..+30 dB, or wlink::kLevelDefault (= 100 %).
 inline void setLevel(uint8_t level) {
     const float db = level == wlink::kLevelDefault ? kDefaultGainDb : kMaxGainDb * (level > 100 ? 100 : level) / 100.0f;
     gainQ12() = int32_t(lroundf(4096.0f * powf(10.0f, db / 20.0f)));

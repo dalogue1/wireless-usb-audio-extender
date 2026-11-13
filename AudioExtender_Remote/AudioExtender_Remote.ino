@@ -47,7 +47,7 @@
 #include "esp_timer.h"
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.0-dev";
+static const char* kFirmware = "1.4.1-dev";
 static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static board::StatusLed led;
@@ -962,7 +962,7 @@ void setup() {
     esp_wifi_get_mac(WIFI_IF_STA, mac);
     static const char* const kSet[] = {"auto", "microphone", "speaker"};
     logf("Wireless USB Audio Extender remote %s | %s | MAC %s", kFirmware, board::kindName(), board::macText(mac).c_str());
-    logf("remote settings: mic %u | channel %u | %u MHz | high-pass %s | distance %s (%s) | mode %s",
+    logf("settings: mic %u | channel %u | %u MHz | high-pass %s | distance %s (%s) | mode %s",
          board::micNumber(pairId), channel, unsigned(getCpuFrequencyMhz()),
          highpassOn.load() ? (String(highpassHz.load()) + " Hz").c_str() : "off", wlink::distanceName(distance),
          wlink::distanceRateText(distance), builtIn ? "microphone (built-in mic)" : kSet[modeSetting]);

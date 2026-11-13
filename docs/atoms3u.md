@@ -67,6 +67,16 @@ The links are examples: any equivalent part works.
 
 Keep the two boards at least 1 m apart.
 
+## Range and placement
+
+The AtomS3U's small chip antenna leaves the link less margin than the XIAO's external antenna, so where the boards sit matters more:
+
+* **Keep a clear path between the boards.** A wall, metal (gutters, siding, appliances) or the computer's case in between can be enough to drop the link. If it drops, **move the local board first**: it is often the one behind something.
+* **Set `distance = far`** in `config.txt` for the most range. It copes worst with busy Wi-Fi, which rarely matters outdoors.
+* **Keep the stick clear and raise it:** away from walls and metal, and a metre or two up if you can. A short USB extension cable lets it stand away from the power supply.
+* **Turn it to match the other antenna:** try the stick upright and on its side.
+* **Check the signal** in `status.txt`: an RSSI better than about −75 dBm is comfortable; below about −85 dBm the link starts to drop.
+
 ## Buttons and LED
 
 Everything works as on the XIAO boards, with the AtomS3U's **back button** in place of BOOT:
@@ -79,6 +89,6 @@ Everything works as on the XIAO boards, with the AtomS3U's **back button** in pl
 | Side button, hold about 2 s | flashing mode (green LED inside) |
 | RGB LED | the same patterns as the XIAO's LED ([LEDs](troubleshooting.md#leds)) |
 
-On an AtomS3U remote, `mic_level` in `config.txt` sets the built-in microphone's gain: `0` to `100` = 0 to +30 dB, `default` = +12 dB ([Mic level](configuration.md#mic-level)).
+On an AtomS3U remote, `mic_level` in `config.txt` sets the built-in microphone's gain: `0` to `100` = 0 to +30 dB, default `100` (+30 dB) ([Mic level](configuration.md#mic-level)).
 
 Settings, the drive, mic numbers, pairing, the `distance` setting, the noise filter and voice feedback are all the same as on the main build: see the [main page](../README.md#more).

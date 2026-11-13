@@ -43,7 +43,7 @@ The local board keeps a log of important events in its own area of flash, separa
 
 ```
 start 7
-    0:00:00  LOCAL BOARD STARTED, firmware 1.4.0: power on (plugged in, or the USB port's power was cut)
+    0:00:00  LOCAL BOARD STARTED, firmware 1.4.1: power on (plugged in, or the USB port's power was cut)
     0:00:01  USB: the PC set the device up
     0:00:03  linked to remote 1
 1d 01:01:01  health: linked, RSSI -71 dBm (remote hears -69), remote queue 34, sends failed 120 | temp remote 68.2 C, local 41.0 C | audio lost 7, late 1, underruns 2 | mem remote 176 KB (largest 135), local 103 KB | PC using the audio

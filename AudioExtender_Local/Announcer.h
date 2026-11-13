@@ -39,6 +39,11 @@ void setEventLog(void (*log)(const char* fmt, ...));
 const char* modeText(Mode m);
 // Factory reset: erase the voice drive (refilled with the built-in clips at the next boot).
 void eraseVoiceFiles();
+// Raw erase of the drive's FAT partition (call with the drive not shared with the PC).
+bool eraseDrivePartition();
+// Start-up check of the mounted drive: true (with why) if it is damaged: a folder that
+// cannot be read, or much more space in use than its files take (lost clusters).
+bool driveDamaged(char* why, size_t cap);
 // Voice files on the drive that passed the checks (the rest use the built-in clips).
 int usableFiles();
 // The ones that did not, with why: "mic_4.wav (empty file), ..." or "none".

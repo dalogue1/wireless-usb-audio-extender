@@ -1,5 +1,6 @@
 #include "Announcer.h"
 #include <FFat.h>
+#include <esp_partition.h>
 #include <atomic>
 #include "Adpcm.h"
 #include "VoiceMixer.h"
@@ -65,7 +66,40 @@ void writeWavHeader(File& f, uint32_t rate, uint32_t frames) {
 // power cut during the first start (right after a full flash) never leaves a broken or
 // empty clip behind. An empty file under a built-in name is written again (an empty
 // file is never someone's own recording).
+// README.txt first: it is small, so the drive explains itself even if the clips that follow
+// are cut short (a power cut during the first start).
+void writeReadme() {
+    if (FFat.exists("/README.txt")) {
+        File o = FFat.open("/README.txt", FILE_READ);
+        const size_t size = o ? o.size() : 0;
+        if (o) o.close();
+        if (size) return;  // keep it (an empty one is written again)
+    }
+    File r = FFat.open("/README.txt", FILE_WRITE);
+    if (r) {
+        r.print("Wireless USB Audio Extender - EXTENDER drive\r\n\r\n"
+                "config.txt  the settings of both boards (mic number, channel, feedback,\r\n"
+                "            noise filter). Edit and save; delete it to return to the defaults.\r\n"
+                "status.txt  what was in effect when the drive was opened.\r\n"
+                "adapter.txt the remote's latest audio adapter: its details and capabilities.\r\n"
+                "events.txt  the event log: starts, USB and link drops, restarts (kept through power cuts).\r\n"
+                "noise.svg   the noise filter's learned background noise (when the filter has learned it).\r\n"
+                "report.html all of the above at a glance: open it in any browser.\r\n"
+                "voice       the announcements.\r\n\r\n"
+                "The local board speaks the files in 'voice'. Replace any of them with\r\n"
+                "your own recording or another language: keep the file names, save as\r\n"
+                "WAV, 16-bit PCM, mono or stereo, 8000-48000 Hz, about 1-2 s each.\r\n"
+                "Silence at the ends is trimmed and the level is evened out automatically.\r\n"
+                "Ready-made sets (other languages, beeps) are in the project's voice-packs folder.\r\n"
+                "A missing or unusable file plays the built-in voice instead.\r\n\r\n"
+                "When done, eject the drive (or press RESET): the local board restarts as the microphone\r\n"
+                "and passes the remote's settings on over the radio.\r\n");
+        r.close();
+    }
+}
+
 void fillVoiceDrive() {
+    writeReadme();
     FFat.mkdir("/voice");
     int written = 0;
     for (int i = 0; i < kEvents; ++i) {
@@ -101,32 +135,7 @@ void fillVoiceDrive() {
         }
         written++;
     }
-    if (FFat.exists("/README.txt")) {
-        if (written && s_log) s_log("voice drive: added %d missing built-in clip(s)", written);
-        return;
-    }
-    File r = FFat.open("/README.txt", FILE_WRITE);
-    if (r) {
-        r.print("Wireless USB Audio Extender - EXTENDER drive\r\n\r\n"
-                "config.txt  the settings of both boards (mic number, channel, feedback,\r\n"
-                "            noise filter). Edit and save; delete it to return to the defaults.\r\n"
-                "status.txt  what was in effect when the drive was opened.\r\n"
-                "adapter.txt the remote's latest audio adapter: its details and capabilities.\r\n"
-                "events.txt  the event log: starts, USB and link drops, restarts (kept through power cuts).\r\n"
-                "noise.svg   the noise filter's learned background noise (when the filter has learned it).\r\n"
-                "report.html all of the above at a glance: open it in any browser.\r\n"
-                "voice       the announcements.\r\n\r\n"
-                "The local board speaks the files in 'voice'. Replace any of them with\r\n"
-                "your own recording or another language: keep the file names, save as\r\n"
-                "WAV, 16-bit PCM, mono or stereo, 8000-48000 Hz, about 1-2 s each.\r\n"
-                "Silence at the ends is trimmed and the level is evened out automatically.\r\n"
-                "Ready-made sets (other languages, beeps) are in the project's voice-packs folder.\r\n"
-                "A missing or unusable file plays the built-in voice instead.\r\n\r\n"
-                "When done, eject the drive (or press RESET): the local board restarts as the microphone\r\n"
-                "and passes the remote's settings on over the radio.\r\n");
-        r.close();
-    }
-    if (s_log) s_log("voice drive: filled with %d built-in clips", written);
+    if (written && s_log) s_log("voice drive: wrote %d built-in clip(s)", written);
 }
 
 // Validates /voice/<name>.wav and finds its trimmed range and level.
@@ -346,9 +355,58 @@ int usableFiles() {
     return n;
 }
 
-void eraseVoiceFiles() {
-    if (FFat.begin(true)) FFat.end();
-    FFat.format(FFAT_WIPE_QUICK);
+// Raw erase of the whole FAT partition: wear levelling and FAT both start afresh at the next
+// mount (FFat.format() works through wear levelling, so it cannot repair damage there).
+bool eraseDrivePartition() {
+    FFat.end();
+    const esp_partition_t* p =
+        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "ffat");
+    return p && esp_partition_erase_range(p, 0, p->size) == ESP_OK;
+}
+
+void eraseVoiceFiles() { eraseDrivePartition(); }
+
+namespace {
+// Adds up the files below dir (each rounded up to a 4 KB cluster, a folder counts one).
+// false: a folder could not be opened (damaged).
+bool sumDir(File dir, uint64_t& sum, int depth) {
+    if (!dir || !dir.isDirectory()) return false;
+    for (;;) {
+        File f = dir.openNextFile();
+        if (!f) break;
+        if (f.isDirectory()) {
+            sum += 4096;
+            if (depth > 0) {
+                File sub = FFat.open(f.path());
+                if (!sumDir(sub, sum, depth - 1)) { f.close(); return false; }
+            }
+        } else {
+            sum += (uint64_t(f.size()) + 4095) / 4096 * 4096;
+        }
+        f.close();
+    }
+    return true;
+}
+}  // namespace
+
+bool driveDamaged(char* why, size_t cap) {
+    if (FFat.exists("/voice")) {
+        File v = FFat.open("/voice");
+        const bool ok = v && v.isDirectory();
+        if (v) v.close();
+        if (!ok) { snprintf(why, cap, "the voice folder could not be read"); return true; }
+    }
+    uint64_t sum = 0;
+    File root = FFat.open("/");
+    const bool walked = sumDir(root, sum, 3);
+    if (root) root.close();
+    if (!walked) { snprintf(why, cap, "a folder could not be read"); return true; }
+    const uint64_t used = FFat.usedBytes();
+    if (used > sum + 128 * 1024) {  // space taken by nothing on the drive: lost clusters
+        snprintf(why, cap, "%u KB used by no file", unsigned((used - sum) / 1024));
+        return true;
+    }
+    return false;
 }
 
 }  // namespace announcer

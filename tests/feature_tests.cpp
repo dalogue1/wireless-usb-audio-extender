@@ -55,8 +55,10 @@ static void configTests() {
     r = cfg::parse("mic_level = 40\n", base);
     CHECK(r.errors == 0 && r.settings.micLevel == 40, "mic_level 40");
     r = cfg::parse("Mic_Level: Default\n", r.settings);
-    CHECK(r.errors == 0 && r.settings.micLevel == cfg::kLevelDefault, "mic_level default");
-    CHECK(cfg::Settings().micLevel == cfg::kLevelDefault, "mic_level defaults to the adapter's own");
+    CHECK(r.errors == 0 && r.settings.micLevel == 100, "mic_level default = 100");
+    r = cfg::parse("mic_level = adapter\n", base);
+    CHECK(r.errors == 0 && r.settings.micLevel == cfg::kLevelDefault, "mic_level adapter");
+    CHECK(cfg::Settings().micLevel == 100, "mic_level defaults to 100 %");
     r = cfg::parse("mic_level = 101\nmic_level = -1\nmic_level = loud\n", base);
     CHECK(r.errors == 3 && r.settings.micLevel == base.micLevel, "mic_level out of range keeps the value");
     {

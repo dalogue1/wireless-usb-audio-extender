@@ -49,7 +49,7 @@
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.0-dev";
+static const char* kFirmware = "1.4.1-dev";
 
 // Time since start from the 64-bit microsecond timer: unlike millis() it does not wrap
 // after 49.7 days, so times in the logs, events.txt and status.txt stay right.
@@ -241,10 +241,20 @@ static void startEventLog(bool asDrive) {
 }
 // Remote log lines worth keeping: restarts and their reasons (all four link-loss lines),
 // errors, warnings, mode and lock changes.
+// A critical remote line waiting for its "... " continuation pieces (they follow within ms).
+static char remotePending[evlog::kMaxText + 1];
+static uint32_t remotePendingAt = 0, remotePendingMs = 0;
+static void flushRemotePending() {
+    if (!remotePending[0]) return;
+    eventLog.addText(remotePendingAt, remotePending, 1);
+    remotePending[0] = 0;
+}
+
 static bool remoteLineIsCritical(const char* t) {
     static const char* const kWords[] = {"restart", "ERROR", "WARNING", "stuck", "crash", "watchdog", "brownout",
                                          "Audio Extender remote", "remote settings:", "link-loss", "while searching", "mode:",
                                          "locked to", "unlocked"};
+    if (strncmp(t, "settings: ", 10) == 0) return true;  // the remote's start-up settings line
     for (const char* w : kWords)
         if (strstr(t, w)) return true;
     return false;
@@ -575,6 +585,14 @@ static void reportRemoteChanges() {
     s.firmware[sizeof(s.firmware) - 1] = 0;
     static uint32_t lastRemoteUpMs = 0;  // a smaller uptime than before: the remote restarted
     // (The remote's millisecond uptime wraps after 49.7 days: a wrap is not a restart.)
+    // A different remote (another MAC, e.g. swapped for an AtomS3U) is not a restart either.
+    static uint8_t lastStatusMac[6] = {};
+    const bool otherRemote = !wlink::macIsZero(lastStatusMac) && memcmp(lastStatusMac, remoteMac, 6) != 0;
+    memcpy(lastStatusMac, remoteMac, 6);
+    if (otherRemote) {
+        evText(0, "a different remote linked: %s, MAC %s", wlink::boardName(s.board), board::macText(remoteMac).c_str());
+        lastRemoteUpMs = 0;
+    }
     const bool wrapped = lastRemoteUpMs > 0xFFFFFFFFu - 120000u && s.uptimeMs < 120000u;
     if (lastRemoteUpMs && s.uptimeMs + 5000 < lastRemoteUpMs && !wrapped) {
         healthSnapshot(true);
@@ -792,10 +810,45 @@ static void updateLed() {
 
 // ---------------------------------------------------------------- settings
 static void restartNow(const char* why, int blinks) {
+    flushRemotePending();
     logf("%s, restarting", why);
     for (int i = 0; i < blinks; ++i) { led.raw(true); delay(150); led.raw(false); delay(150); }
     delay(300);
     ESP.restart();
+}
+
+// Mounts the drive at start-up, and repairs it if it is damaged (a power cut while it was
+// being written, e.g. during the first start right after flashing): the whole partition is
+// erased raw and formatted again; config.txt is kept if it could still be read; the voice
+// clips and README.txt are written again by announcer::begin().
+static bool mountDrive() {
+    char why[64] = "";
+    bool damaged = false;
+    if (!FFat.begin(true)) {
+        if (!esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "ffat")) return false;
+        snprintf(why, sizeof(why), "it could not be mounted");
+        damaged = true;
+    } else {
+        damaged = announcer::driveDamaged(why, sizeof(why));
+    }
+    if (!damaged) return true;
+    String keep;
+    if (FFat.exists("/config.txt")) {
+        File f = FFat.open("/config.txt", FILE_READ);
+        if (f && f.size() > 0 && f.size() < 8192) keep = f.readString();
+        if (f) f.close();
+    }
+    logf("drive: DAMAGED (%s): erasing and formatting it again", why);
+    esp_task_wdt_reset();
+    const bool erased = announcer::eraseDrivePartition();
+    const bool ok = erased && FFat.begin(true);
+    if (ok && keep.length()) {
+        File f = FFat.open("/config.txt", FILE_WRITE);
+        if (f) { f.print(keep); f.close(); }
+    }
+    evText(0, "EXTENDER drive was damaged (%s): %s%s", why, ok ? "erased and formatted again" : "repair FAILED",
+           ok && keep.length() ? ", config.txt kept" : "");
+    return ok;
 }
 
 // Reads /config.txt (creating it with the defaults if missing). Values the
@@ -839,7 +892,7 @@ static void readConfig(uint8_t curPair, uint8_t curChannel) {
          cfg::remoteText(config));
     char lv[12];
     cfg::levelText(config.micLevel, lv, sizeof(lv));
-    logf("config.txt: mic level %s%s", lv, config.micLevel <= 100 ? " % of the adapter's range" : " (the adapter's own)");
+    logf("config.txt: mic level %s%s", lv, config.micLevel <= 100 ? " % of the adapter's range (AtomS3U: of its gain)" : " (the adapter's own)");
 }
 
 // ---------------------------------------------------------------- temperatures
@@ -1149,10 +1202,11 @@ static void renderNoiseSvg(noisesvg::Out& out) {
     s.name[sizeof(s.name) - 1] = 0;
     char title[96], line1[160], line2[200], lv[12], lvDb[40] = "";
     snprintf(title, sizeof(title), "Extender Mic %u - background noise learned by the remote's noise filter", board::micNumber(pairId));
-    snprintf(line1, sizeof(line1), "learned over %s | adapter: %s | drive opened at start %u, %s", evlog::Log::dur(noise.learnedS).s,
-             s.name[0] ? s.name : "?", eventLog.start(), evlog::Log::dur(upS()).s);
+    const bool atom = s.board == wlink::kBoardAtomS3U;
+    snprintf(line1, sizeof(line1), "learned over %s | %s: %s | drive opened at start %u, %s", evlog::Log::dur(noise.learnedS).s,
+             atom ? "microphone" : "adapter", s.name[0] ? s.name : "?", eventLog.start(), evlog::Log::dur(upS()).s);
     cfg::levelText(s.micLevel, lv, sizeof(lv));
-    if (s.hasLevel) snprintf(lvDb, sizeof(lvDb), " (adapter at %.1f dB)", s.levelNow / 256.0);
+    if (s.hasLevel) snprintf(lvDb, sizeof(lvDb), atom ? " (gain %.1f dB)" : " (adapter at %.1f dB)", s.levelNow / 256.0);
     char hp[24];
     if (s.highpassOn) snprintf(hp, sizeof(hp), "on, %u Hz", unsigned(s.highpassHz));
     else snprintf(hp, sizeof(hp), "off");
@@ -1222,7 +1276,28 @@ static void writeNotWritten(const char* path, const char* what) {
     logf("drive: %s did not fit on the drive", what);
 }
 
+// The remote in use is an AtomS3U (its latest status says so): it has no USB adapter.
+static bool remoteIsAtom(char* mac, size_t cap) {
+    if (!statusCount.load()) return false;
+    wlink::StatusPacket s;
+    portENTER_CRITICAL(&linkMux);
+    memcpy(&s, &remoteStatus, sizeof(s));
+    portEXIT_CRITICAL(&linkMux);
+    strlcpy(mac, board::macText(remoteMac).c_str(), cap);
+    return s.board == wlink::kBoardAtomS3U;
+}
+
 static void writeAdapterText(WriteFn w, void* c) {
+    char mac[24];
+    if (remoteIsAtom(mac, sizeof(mac))) {  // never leave an older adapter's details to be taken for this remote's
+        char text[320];
+        snprintf(text, sizeof(text),
+                 "Wireless USB Audio Extender - the remote's audio adapter\r\n\r\n"
+                 "The remote (MAC %s) is an M5Stack AtomS3U: it uses its built-in microphone\r\n"
+                 "(SPM1423, PDM) and has no USB audio adapter. See status.txt for its microphone and gain.\r\n", mac);
+        w(c, text);
+        return;
+    }
     char seen[120];
     if (!adapterRecLen) {
         snprintf(seen, sizeof(seen), "written %lu s after the local board started", (unsigned long)upS());
@@ -1240,6 +1315,7 @@ static void writeAdapterText(WriteFn w, void* c) {
 // events.txt, report.html (if space runs out, the small important ones are there).
 static void writeDriveFiles(bool haveGraph) {
     const uint32_t t0 = millis();
+    flushRemotePending();
     // A fresh local temperature for status.txt (the radio pause no longer matters: the board restarts next).
     if (config.temperature) localTemp.add(readTempRadioPaused(), upS(), "local");
     auto statusText = [](WriteFn w, void* c) { evlog::Out o{w, c}; renderStatus(o); };
@@ -1509,7 +1585,7 @@ void setup() {
     if (channel < wlink::kMinChannel || channel > wlink::kMaxChannel) channel = wlink::kDefaultChannel;
     // config.txt (not in drive mode: then the PC owns the FAT partition)
     if (!driveMode) {
-        if (FFat.begin(true)) readConfig(pairId, channel);
+        if (mountDrive()) readConfig(pairId, channel);
         else logf("config.txt: no FAT partition (flash the full image); using the saved settings");
         wantPair = uint8_t(config.mic - 1);
         wantChannel = config.channel;
@@ -1543,7 +1619,7 @@ void setup() {
     }
     USB.productName(name);
     USB.manufacturerName("Wireless USB Audio Extender");
-    USB.firmwareVersion(0x0136);
+    USB.firmwareVersion(0x0141);
     USB.onEvent(onUsbEvent);
     LogPort.setTxTimeoutMs(20);  // never stall when no terminal is open
     LogPort.onEvent(onSerialEvent);
@@ -1701,13 +1777,24 @@ void loop() {
         const char* q = txt;
         while ((*q >= '0' && *q <= '9') || *q == '.') q++;
         if (q != txt && *q == ' ') txt = q + 1;
-        // A long line arrives in pieces, the later ones starting with "... ": keep them
-        // with a critical first piece.
-        static bool lastKept = false;
-        const bool continuation = strncmp(txt, "... ", 4) == 0;
-        lastKept = continuation ? lastKept : remoteLineIsCritical(txt);
-        if (lastKept) eventLog.addText(upS(), txt, 1);
+        // A long line arrives in pieces, the later ones starting with "... ": they are joined
+        // back onto a critical first piece and logged as one event (flushRemotePending()).
+        if (strncmp(txt, "... ", 4) == 0) {
+            if (remotePending[0]) {
+                const size_t len = strlen(remotePending);
+                snprintf(remotePending + len, sizeof(remotePending) - len, " %s", txt + 4);
+                remotePendingMs = millis();
+            }
+        } else {
+            flushRemotePending();
+            if (remoteLineIsCritical(txt)) {
+                strlcpy(remotePending, txt, sizeof(remotePending));
+                remotePendingAt = upS();
+                remotePendingMs = millis();
+            }
+        }
     }
+    if (remotePending[0] && millis() - remotePendingMs > 500) flushRemotePending();
     reportRemoteChanges();
     checkMode();
     reportPairing();

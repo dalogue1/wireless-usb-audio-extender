@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
         log.add(evlog::kHealthTemp, 97300, 255, uint16_t(int16_t(700)), uint32_t(uint16_t(int16_t(500))) << 16 | 65535u);
         log.add(evlog::kHealthMem, 97300, 255, 135, 176u << 16 | 103u);
         std::string longLine = "link-loss details (this drop): last packet from the local board 2010 ms before, last acknowledged send 788 ms before";
-        while (longLine.size() < 159) longLine += "x";
+        while (longLine.size() < evlog::kMaxText) longLine += "x";  // 255: a remote line joined from its pieces
         log.addText(97301, longLine.c_str(), 1);
         log.add(evlog::kModeChange, 97302, 1, 5);
         const std::string t3 = render(log, 97400);

@@ -12,7 +12,8 @@
 //   highpass = on        on, off                          (remote)
 //   highpass_hz = 200    50..1000 (Hz)                    (remote)
 //   temperature = on     on, off: log chip temperatures   (both boards)
-//   mic_level = default  default, or 0..100 (% of the adapter's level range) (remote)
+//   mic_level = 100      0..100 (% of the adapter's level range; AtomS3U: of 0..+30 dB gain),
+//                        or adapter (leave the adapter's own level); "default" = 100 (remote)
 //   distance = normal    near, normal or far: radio rate of the link (both boards)
 //   mode = auto          auto, microphone or speaker (both boards)
 //   remote = any         any, or the remote's MAC address: lock the pair (both boards)
@@ -29,7 +30,7 @@ namespace cfg {
 
 constexpr uint8_t kLevelDefault = 255;  // = wlink::kLevelDefault
 inline void levelText(uint8_t v, char* out, size_t cap) {
-    if (v > 100) snprintf(out, cap, "default");
+    if (v > 100) snprintf(out, cap, "adapter");
     else snprintf(out, cap, "%u", unsigned(v));
 }
 
@@ -44,7 +45,7 @@ struct Settings {
     uint8_t highpass = 1;   // 1 on, 0 off
     uint16_t highpassHz = 200;  // 50..1000
     uint8_t temperature = 1;    // 1: read and log both chips' temperature (every 10 min, radio paused)
-    uint8_t micLevel = kLevelDefault;  // 0..100 %, or kLevelDefault (the adapter's own level)
+    uint8_t micLevel = 100;  // 0..100 %, or kLevelDefault (leave the adapter's own level)
     uint8_t distance = 0;   // 0 normal, 1 near, 2 far            (wlink::Distance order)
     uint8_t mode = 0;       // 0 auto, 1 microphone, 2 speaker    (wlink::ModeSetting order)
     bool lock = false;      // remote = <MAC>: link only to that remote, and lock it to this local board
@@ -177,7 +178,8 @@ inline Result parse(const char* text, const Settings& base) {
             } else if (strcmp(key, "cpu_mhz") == 0) {
                 if ((ok = isNum && (num == 240 || num == 160))) r.settings.cpuMhz = uint8_t(num);
             } else if (strcmp(key, "mic_level") == 0) {
-                if (strcmp(val, "default") == 0) { r.settings.micLevel = kLevelDefault; ok = true; }
+                if (strcmp(val, "default") == 0) { r.settings.micLevel = 100; ok = true; }  // 1.4.1: default = 100 %
+                else if (strcmp(val, "adapter") == 0) { r.settings.micLevel = kLevelDefault; ok = true; }
                 else if ((ok = isNum && num >= 0 && num <= 100)) r.settings.micLevel = uint8_t(num);
             } else if (strcmp(key, "noise_adapt") == 0) {
                 if ((ok = (idx = pick(val, adapt, 3)) >= 0)) r.settings.adapt = uint8_t(idx);
@@ -227,9 +229,10 @@ inline int format(const Settings& s, char* out, size_t cap) {
         "highpass = %s           # on, off: remove rumble, wind and hum below highpass_hz (remote)\r\n"
         "highpass_hz = %u        # 50-1000: high-pass cut-off in Hz (200 keeps low owl and dove calls)\r\n"
         "temperature = %s         # on, off: log both chips' temperature every 10 min (radio paused ~0.2 s)\r\n"
-        "mic_level = %s     # default, or 0-100: the adapter's microphone level, %% of its range\r\n"
-        "                       # (default leaves the adapter's own level; status.txt shows it in dB;\r\n"
-        "                       # in speaker mode it sets the adapter's speaker level)\r\n"
+        "mic_level = %s         # 0-100: the adapter's microphone level, %% of its range (default 100);\r\n"
+        "                       # adapter = leave the adapter's own level. AtomS3U: the built-in mic's\r\n"
+        "                       # gain, 0-100 = 0 to +30 dB. status.txt shows it in dB. In speaker\r\n"
+        "                       # mode it sets the adapter's speaker level\r\n"
         "distance = %s       # near, normal or far: far reaches furthest but copes worst with busy\r\n"
         "                       # Wi-Fi; near is the most robust where Wi-Fi is busy (both boards)\r\n"
         "mode = %s             # auto, microphone or speaker: which way the audio goes. auto decides\r\n"

@@ -25,7 +25,7 @@ cpu_mhz = 240        # 240 or 160: processor speed of both boards (160 runs a li
 highpass = on        # on, off: remove rumble, wind and hum below highpass_hz (remote)
 highpass_hz = 200    # 50-1000: high-pass cut-off in Hz
 temperature = on     # on, off: log both chips' temperature every 10 min
-mic_level = default  # default, or 0-100: the adapter's microphone level, % of its range (AtomS3U: gain)
+mic_level = 100      # 0-100: the adapter's microphone level, % of its range; adapter = leave it (AtomS3U: gain)
 distance = normal    # near, normal or far: radio rate of the link (both boards)
 mode = auto          # auto, microphone or speaker: which way the audio goes
 remote = any         # any, or the remote's MAC address: lock the pair to each other
@@ -56,9 +56,9 @@ With `temperature = on` each board reads its chip temperature once every 10 minu
 
 ### Mic level
 
-Most USB audio adapters have a microphone level control: a gain stage inside the adapter. `mic_level = default` leaves it where the adapter puts it (many power up at their maximum). `mic_level = 0` to `100` sets it to that share of the adapter's range, in dB, when the adapter starts streaming and whenever it is plugged in again. Lower it if a sensitive mic clips, or if a lower level gives a quieter noise floor. `status.txt` shows the setting and the adapter's actual level and range in dB. Switching back to `default` leaves the adapter at the last level set until it is unplugged. Adapters without a level control ignore the setting. In speaker mode it sets the adapter's speaker level.
+Most USB audio adapters have a microphone level control: a gain stage inside the adapter. `mic_level = 0` to `100` sets it to that share of the adapter's range, in dB, when the adapter starts streaming and whenever it is plugged in again. The default is `100`, the top of the range (many adapters power up there anyway). Lower it if a sensitive mic clips, or if a lower level gives a quieter noise floor. `mic_level = adapter` leaves the level where the adapter puts it. `status.txt` shows the setting and the adapter's actual level and range in dB. Switching to `adapter` leaves the adapter at the last level set until it is unplugged. (`default` is still accepted and means `100`.) Adapters without a level control ignore the setting. In speaker mode it sets the adapter's speaker level.
 
-On an [AtomS3U](atoms3u.md) remote, `mic_level` is the built-in microphone's digital gain instead: `0` to `100` = 0 to +30 dB, `default` = +12 dB. Raise it if birds show only faintly in BirdNET; lower it if loud calls clip.
+On an [AtomS3U](atoms3u.md) remote, `mic_level` is the built-in microphone's digital gain instead: `0` to `100` = 0 to +30 dB, default `100` (+30 dB). Lower it if loud calls clip.
 
 ## BOOT button
 

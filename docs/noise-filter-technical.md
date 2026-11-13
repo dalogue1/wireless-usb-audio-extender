@@ -1,5 +1,7 @@
 # Noise filter (remote): technical description
 
+[← Back to the noise filter](noise-filter.md) · [Main page](../README.md)
+
 The remote board removes the steady background noise of the microphone and the site (capsule hiss, adapter preamp noise, hum, distant traffic, HVAC) before the audio goes over the radio. Sounds that come and go, such as bird calls, pass through. The user-level page is [noise-filter.md](noise-filter.md); this file explains how the filter works inside. The published methods it is based on, with references, are in [noise-filter-basis.md](noise-filter-basis.md).
 
 Source: `AudioExtender_Remote/NoiseSignature.h` (the engine, plain C++, no Arduino dependencies), used by the audio task in `AudioExtender_Remote.ino`.

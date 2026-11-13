@@ -20,15 +20,16 @@ code{background:#eef0f4;padding:1px 5px;border-radius:4px}
 </style>
 </head>
 <body>
+<p class="note" style="margin:0 0 8px"><a href="../">&larr; Back to the main page</a></p>
 <h1>Wireless USB Audio Extender</h1>
-<p class="sub">Web flasher, firmware 1.4.0-dev. Flash both boards with the same version.</p>
+<p class="sub">Web flasher, firmware 1.4.1-dev. Flash both boards with the same version.</p>
 
 <p class="warn" id="nosupport" hidden>This browser can't flash boards. Use <b>Chrome or Edge on a desktop computer</b> (Windows, macOS, Linux).</p>
 
 <p>Click a board's button below, choose its serial port, and confirm. Each takes about a minute; unplug the board when it's done. First put the board into flashing mode:</p>
 <ul>
 <li><b>XIAO ESP32-S3:</b> <b>hold its BOOT button while you plug it in</b> with a USB <b>data</b> cable, then release it (otherwise no device appears).</li>
-<li><b>M5Stack <a href="https://github.com/dalogue1/wireless-usb-audio-extender/blob/main/docs/atoms3u.md">AtomS3U</a>:</b> plug it in, then <b>hold its side button for about 2 s until the green LED inside lights up</b>, and release it.</li>
+<li><b>M5Stack <a href="../docs/atoms3u.html">AtomS3U</a>:</b> plug it in, then <b>hold its side button for about 2 s until the green LED inside lights up</b>, and release it.</li>
 </ul>
 
 <div class="board">
@@ -50,8 +51,8 @@ code{background:#eef0f4;padding:1px 5px;border-radius:4px}
 </div>
 
 <h2>Then</h2>
-<p>Unplug both boards. Assemble the remote (board, OTG splitter, audio adapter, microphone, 5 V power; an AtomS3U remote just plugs into a 5 V USB power supply) and plug the local board into the computer. Within a few seconds the computer has a new microphone, <b>Extender Mic 1</b>. No settings needed.</p>
-<p class="note">Full instructions: <a href="https://github.com/dalogue1/wireless-usb-audio-extender">github.com/dalogue1/wireless-usb-audio-extender</a></p>
+<p><b>After installing a local board, leave it plugged in for about 20 seconds</b>: on its first start it writes its files (voice clips, README) to its drive. Then unplug both boards. Assemble the remote (board, OTG splitter, audio adapter, microphone, 5 V power; an AtomS3U remote just plugs into a 5 V USB power supply) and plug the local board into the computer. Within a few seconds the computer has a new microphone, <b>Extender Mic 1</b>. No settings needed.</p>
+<p class="note">Full instructions: <a href="../">the main page</a> (source code: <a href="https://github.com/dalogue1/wireless-usb-audio-extender">GitHub</a>)</p>
 <script>
 if (!("serial" in navigator)) document.getElementById("nosupport").hidden = false;
 </script>
