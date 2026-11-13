@@ -1,0 +1,6 @@
+# USB Audio Extender: keep Linux from power-saving (autosuspending) the local board.
+# Install:  sudo cp 99-usb-audio-extender.rules /etc/udev/rules.d/
+#           sudo udevadm control --reload
+# then unplug and replug the local board. Check:
+#           cat /sys/bus/usb/devices/*/power/control   (the extender's shows "on")
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{product}=="Extender Mic*", TEST=="power/control", ATTR{power/control}="on"

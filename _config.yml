@@ -1,0 +1,11 @@
+# GitHub Pages: serves the web flasher (flash/) and the firmware images it installs.
+title: Wireless USB Audio Extender
+exclude:
+  - AudioExtender_Local
+  - AudioExtender_Remote
+  - shared
+  - usbmic
+  - tests
+  - tools
+  - voice
+  - voice-packs

@@ -1,0 +1,17 @@
+{
+  "name": "Wireless USB Audio Extender - remote board (at the mic)",
+  "version": "1.4.0-dev",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "../firmware/wireless-usb-audio-extender-remote-1.4.0-dev-full.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

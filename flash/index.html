@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wireless USB Audio Extender - web flasher</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+body{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;max-width:760px;margin:32px auto;padding:0 16px;color:#1d2433;line-height:1.5}
+h1{font-size:24px;margin-bottom:4px}h2{font-size:18px;margin:28px 0 8px}
+.sub{color:#5b6475;margin-top:0}
+.board{border:1px solid #d5d9e0;border-radius:10px;padding:16px 18px;margin:14px 0;background:#fafbfc}
+.board h2{margin-top:0}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:10px}
+esp-web-install-button button,.btn{font:inherit;font-size:15px;padding:9px 16px;border-radius:8px;border:1px solid #2f5fb3;background:#2f6fd6;color:#fff;cursor:pointer}
+.btn.alt{background:#fff;color:#2f5fb3}
+.note{font-size:14px;color:#5b6475}
+.warn{background:#fff6e5;border:1px solid #f0c36d;border-radius:8px;padding:10px 14px;font-size:14px}
+code{background:#eef0f4;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<h1>Wireless USB Audio Extender</h1>
+<p class="sub">Web flasher, firmware 1.4.0-dev. Flash both boards with the same version.</p>
+
+<p class="warn" id="nosupport" hidden>This browser can't flash boards. Use <b>Chrome or Edge on a desktop computer</b> (Windows, macOS, Linux).</p>
+
+<p>Click a board's button below, choose its serial port, and confirm. Each takes about a minute; unplug the board when it's done. First put the board into flashing mode:</p>
+<ul>
+<li><b>XIAO ESP32-S3:</b> <b>hold its BOOT button while you plug it in</b> with a USB <b>data</b> cable, then release it (otherwise no device appears).</li>
+<li><b>M5Stack <a href="https://github.com/dalogue1/wireless-usb-audio-extender/blob/main/docs/atoms3u.md">AtomS3U</a>:</b> plug it in, then <b>hold its side button for about 2 s until the green LED inside lights up</b>, and release it.</li>
+</ul>
+
+<div class="board">
+  <h2>1. Local board (plugs into the PC)</h2>
+  <div class="row">
+    <esp-web-install-button manifest="local-install.json"><button slot="activate">Install local board</button><span slot="unsupported"></span></esp-web-install-button>
+    <esp-web-install-button manifest="local-update.json"><button slot="activate" class="btn alt">Update (keep settings)</button><span slot="unsupported"></span></esp-web-install-button>
+  </div>
+  <p class="note">Install: the first time, or to start over (resets config.txt, voice files and saved settings). Update: from 1.1 or later, keeps them. The same firmware runs on a XIAO ESP32-S3 or an AtomS3U, with either kind of remote.</p>
+</div>
+
+<div class="board">
+  <h2>2. Remote board (goes with the microphone)</h2>
+  <div class="row">
+    <esp-web-install-button manifest="remote-install.json"><button slot="activate">Install remote board</button><span slot="unsupported"></span></esp-web-install-button>
+    <esp-web-install-button manifest="remote-update.json"><button slot="activate" class="btn alt">Update (keep settings)</button><span slot="unsupported"></span></esp-web-install-button>
+  </div>
+  <p class="note">The same firmware runs on a XIAO ESP32-S3 (with a USB audio adapter) or an AtomS3U (built-in microphone), with either kind of local board. Once flashed, the XIAO remote's USB-C port works as a USB host for the audio adapter, so it never shows up as a port unless BOOT is held while plugging it in.</p>
+</div>
+
+<h2>Then</h2>
+<p>Unplug both boards. Assemble the remote (board, OTG splitter, audio adapter, microphone, 5 V power; an AtomS3U remote just plugs into a 5 V USB power supply) and plug the local board into the computer. Within a few seconds the computer has a new microphone, <b>Extender Mic 1</b>. No settings needed.</p>
+<p class="note">Full instructions: <a href="https://github.com/dalogue1/wireless-usb-audio-extender">github.com/dalogue1/wireless-usb-audio-extender</a></p>
+<script>
+if (!("serial" in navigator)) document.getElementById("nosupport").hidden = false;
+</script>
+</body>
+</html>
