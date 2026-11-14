@@ -50,7 +50,7 @@
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.2-dev";
+static const char* kFirmware = "1.4.3-dev";
 
 // Time since start from the 64-bit microsecond timer: unlike millis() it does not wrap
 // after 49.7 days, so times in the logs, events.txt and status.txt stay right.
@@ -523,6 +523,9 @@ static bool pcUsing() { return speakerMode() ? usbspkdev::pcPlaying() : usbmicde
 // at its start, so the remote decodes every packet on its own. Its own task, so the drive
 // files or a slow loop never hold the audio up.
 static std::atomic<uint32_t> spkSent{0}, spkFailed{0};
+// Temperature read (readTempRadioPaused): new speaker sends stop while the radio is paused,
+// and the pause waits for a send already under way (1.4.3; see the remote's quietRadio()).
+static std::atomic<bool> radioPaused{false}, spkSending{false};
 static void speakerTask(void*) {
     static wlink::StereoAudioPacket pkt;
     static int16_t pcm[2 * wlink::kPacketSamples];  // left, right interleaved
@@ -557,11 +560,15 @@ static void speakerTask(void*) {
             enc[ch].encode(pcm + ch, wlink::kPacketSamples, 2, pkt.data + ch * wlink::kAdpcmChannelBytes);
         }
         esp_err_t err = ESP_FAIL;
-        for (int attempt = 0; attempt < 4; ++attempt) {  // the radio queue can be full for a moment
-            err = esp_now_send(remoteMac, (const uint8_t*)&pkt, sizeof(pkt));
-            if (err != ESP_ERR_ESPNOW_NO_MEM) break;
-            vTaskDelay(1);
+        spkSending = true;
+        if (!radioPaused.load()) {
+            for (int attempt = 0; attempt < 4; ++attempt) {  // the radio queue can be full for a moment
+                err = esp_now_send(remoteMac, (const uint8_t*)&pkt, sizeof(pkt));
+                if (err != ESP_ERR_ESPNOW_NO_MEM) break;
+                vTaskDelay(1);
+            }
         }
+        spkSending = false;
         if (err == ESP_OK) spkSent++;
         else spkFailed++;
     }
@@ -934,6 +941,9 @@ static TempTrack localTemp, remoteTemp;
 // Temperature read with the radio paused (see the remote's readTempRadioPaused): ESP-NOW
 // and Wi-Fi stop, one read, then both start again and the remote is restored as a peer.
 static int16_t readTempRadioPaused() {
+    radioPaused = true;
+    for (uint32_t t0 = millis(); spkSending.load() && millis() - t0 < 200;) delay(1);
+    delay(20);  // let what is already queued go out
     esp_now_deinit();
     esp_wifi_stop();
     const int16_t t = board::readChipTempOnce();
@@ -941,6 +951,7 @@ static int16_t readTempRadioPaused() {
     board::startRadio(channel, onRecv, nullptr);
     board::setTxPower(config.txPower);
     if (linked) board::addPeer(remoteMac, true, config.distance);
+    radioPaused = false;
     return t;
 }
 
@@ -1018,8 +1029,11 @@ static void healthSnapshot(bool forEvent) {
                  cap16(st.radioQueued) << 16 | cap16(dFailed));
     eventLog.add(evlog::kHealthTemp, nowS, cap8(js.lateBlocks - prev.lateBlocks), uint16_t(remoteT),
                  uint32_t(uint16_t(localT)) << 16 | cap16(js.lostBlocks - prev.lostBlocks));
-    eventLog.add(evlog::kHealthMem, nowS, cap8(js.underruns - prev.underruns), uint16_t(cap16(st.heapLargest / 1024)),
-                 cap16(st.heapFree / 1024) << 16 | cap16(m.free / 1024));
+    // 1.4.3: kHealthMem2, so underruns (16 bits) and late (12 bits) no longer stop at 255.
+    auto cap = [](uint32_t v, uint32_t mx) { return v > mx ? mx : v; };
+    eventLog.add(evlog::kHealthMem2, nowS, cap8(st.heapLargest / 1024), uint16_t(cap16(js.underruns - prev.underruns)),
+                 cap(js.lateBlocks - prev.lateBlocks, 4095) << 20 | cap(st.heapFree / 1024, 1023) << 10 |
+                     cap(m.free / 1024, 1023));
     prev = js;
 }
 
@@ -1119,6 +1133,9 @@ static void renderStatus(evlog::Out& f) {
     if (config.temperature)
         f.printf("  processor %u MHz, chip temperature %s (max %s)\r\n", unsigned(getCpuFrequencyMhz()),
                  board::tempText(localTemp.now).c_str(), maxText(localTemp).c_str());
+    else if (localTemp.now != wlink::kTempUnknown)
+        f.printf("  processor %u MHz, chip temperature %s (read once as the drive opened)\r\n",
+                 unsigned(getCpuFrequencyMhz()), board::tempText(localTemp.now).c_str());
     else
         f.printf("  processor %u MHz\r\n", unsigned(getCpuFrequencyMhz()));
     if (handoverPending)
@@ -1153,8 +1170,12 @@ static void renderStatus(evlog::Out& f) {
         if (s.temperatureOn)
             f.printf("  processor %u MHz, chip temperature %s (max %s)\r\n", unsigned(s.cpuMhz),
                      board::tempText(s.tempDeciC).c_str(), maxText(remoteTemp).c_str());
+        else if (s.tempDeciC != wlink::kTempUnknown)
+            f.printf("  processor %u MHz, chip temperature %s (read once as the drive opened)\r\n", unsigned(s.cpuMhz),
+                     board::tempText(s.tempDeciC).c_str());
         else
-            f.printf("  processor %u MHz\r\n", unsigned(s.cpuMhz));
+            f.printf("  processor %u MHz, chip temperature not read (the remote did not answer in time)\r\n",
+                     unsigned(s.cpuMhz));
         if (s.board == wlink::kBoardAtomS3U) f.printf("  microphone: %s %s\r\n", adapterText(s), s.name);
         else f.printf("  adapter: %s %s\r\n", adapterText(s), s.name);
         if (s.audioMode == wlink::kModeSpeaker) {
@@ -1326,8 +1347,9 @@ static void writeAdapterText(WriteFn w, void* c) {
 static void writeDriveFiles(bool haveGraph) {
     const uint32_t t0 = millis();
     flushRemotePending();
-    // A fresh local temperature for status.txt (the radio pause no longer matters: the board restarts next).
-    if (config.temperature) localTemp.add(readTempRadioPaused(), upS(), "local");
+    // A fresh local temperature for status.txt (the radio pause no longer matters: the board
+    // restarts next). 1.4.3: also with temperature = off - one reading is better than none.
+    localTemp.add(readTempRadioPaused(), upS(), "local");
     auto statusText = [](WriteFn w, void* c) { evlog::Out o{w, c}; renderStatus(o); };
     if (!writeDriveFile("/status.txt", statusText)) writeNotWritten("/status.txt", "status.txt");
     if (!writeDriveFile("/adapter.txt", writeAdapterText)) writeNotWritten("/adapter.txt", "adapter.txt");
@@ -1408,7 +1430,20 @@ static void serviceDriveOpening() {
         wlink::fill(h, wlink::kNoiseRequest, pairId);
         esp_now_send(remoteMac, (const uint8_t*)&h, sizeof(h));
     }
-    const bool done = fresh && (!graph || haveNoise);
+    // 1.4.3: with temperature = off the remote reads its chip temperature once, on request;
+    // its next status carries it. Asked once a second; at most 4 s spent waiting for it.
+    static uint32_t lastTempAsk = 0, firstTempAsk = 0;
+    const bool wantTemp = fresh && !s.temperatureOn;
+    const bool haveTemp = s.tempDeciC != wlink::kTempUnknown;
+    if (wantTemp && !haveTemp && now - lastTempAsk > 1000) {
+        lastTempAsk = now;
+        if (!firstTempAsk) firstTempAsk = now;
+        wlink::Header h;
+        wlink::fill(h, wlink::kTempRequest, pairId);
+        esp_now_send(remoteMac, (const uint8_t*)&h, sizeof(h));
+    }
+    const bool tempDone = !wantTemp || haveTemp || (firstTempAsk && now - firstTempAsk > 4000);
+    const bool done = fresh && (!graph || haveNoise) && tempDone;
     if (!done && now - driveClickMs < 15000) return;
     driveRemoteLate = !fresh;
     if (!fresh) noiseWanted(s, false);  // sets noiseWhy

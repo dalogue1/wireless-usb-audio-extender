@@ -57,8 +57,11 @@ enum Code : uint8_t {
                         // a32 = remote radio queue << 16 | remote sends failed (queue full + no ack)
     kHealthTemp = 61,   // a8 = audio blocks late, a16 = remote temp 0.1 C (int16),
                         // a32 = local temp 0.1 C (int16) << 16 | audio blocks lost
-    kHealthMem = 62,    // a8 = buffer underruns, a16 = remote largest free block KB,
+    kHealthMem = 62,    // up to 1.4.2: a8 = buffer underruns, a16 = remote largest free block KB,
                         // a32 = remote free KB << 16 | local free KB
+    kHealthMem2 = 63,   // 1.4.3 (replaces kHealthMem; counts no longer stop at 255):
+                        // a8 = remote largest free block KB, a16 = buffer underruns,
+                        // a32 = audio blocks late (12 bits) << 20 | remote free KB (10) << 10 | local free KB (10)
     kData = 0xFE,           // 13 bytes of the preceding TEXT record
 };
 
@@ -307,8 +310,8 @@ public:
             }
             flushText();  // a TEXT whose pieces were cut short
             if (r.code == kSector) return;
-            if (r.code >= kHealthRadio && r.code <= kHealthMem) {
-                const int i = r.code - kHealthRadio;
+            if (r.code >= kHealthRadio && r.code <= kHealthMem2) {
+                const int i = r.code == kHealthMem2 ? 2 : r.code - kHealthRadio;
                 if ((healthMask & (1 << i)) || (healthMask && (r.start != snapStart || r.t != snapT)))
                     flushHealth();  // a different snapshot
                 if (!healthMask) {
@@ -389,6 +392,39 @@ public:
     struct Count { char s[12]; };
     static Count count8(uint8_t v) { Count c; snprintf(c.s, sizeof(c.s), v == 255 ? "255+" : "%u", unsigned(v)); return c; }
     static Count count16(uint32_t v) { Count c; snprintf(c.s, sizeof(c.s), v == 65535 ? "65535+" : "%lu", (unsigned long)v); return c; }
+    static Count countMax(uint32_t v, uint32_t cap) {
+        Count c;
+        snprintf(c.s, sizeof(c.s), v >= cap ? "%lu+" : "%lu", (unsigned long)(v >= cap ? cap : v));
+        return c;
+    }
+    // A snapshot's counts and memory, from either memory record (kHealthMem up to 1.4.2,
+    // kHealthMem2 from 1.4.3). h: the three records, mask: which arrived.
+    struct HealthNums {
+        Count late, underruns;
+        uint32_t remoteFree = 0, remoteLargest = 0, localFree = 0;
+        bool haveLate = false, haveMem = false;
+    };
+    static HealthNums healthNums(const Rec* h, uint8_t mask) {
+        HealthNums n;
+        if (mask & 2) { n.late = count8(h[1].a8); n.haveLate = true; }
+        if (mask & 4) {
+            n.haveMem = true;
+            if (h[2].code == kHealthMem2) {
+                n.underruns = count16(h[2].a16);
+                n.late = countMax(h[2].a32 >> 20, 4095);
+                n.haveLate = true;
+                n.remoteLargest = h[2].a8;
+                n.remoteFree = h[2].a32 >> 10 & 0x3FF;
+                n.localFree = h[2].a32 & 0x3FF;
+            } else {
+                n.underruns = count8(h[2].a8);
+                n.remoteLargest = h[2].a16;
+                n.remoteFree = h[2].a32 >> 16;
+                n.localFree = h[2].a32 & 0xFFFF;
+            }
+        }
+        return n;
+    }
 
 private:
     struct Line {  // a growing line of text
@@ -416,19 +452,20 @@ private:
             if (remote) add(" (remote hears %d), remote queue %s, sends failed %s", int(int8_t(h[0].a16 & 0xFF)),
                             count16(h[0].a32 >> 16).s, count16(h[0].a32 & 0xFFFF).s);
         }
+        const HealthNums n = healthNums(h, mask);
         if (mask & 2) {
             char rt[16], lt[16];
             tempText(int16_t(h[1].a16), rt, sizeof(rt));
             tempText(int16_t(h[1].a32 >> 16), lt, sizeof(lt));
             if (remote) add(" | temp remote %s, local %s", rt, lt);
             else add(" | temp local %s", lt);
-            add(" | audio lost %s, late %s", count16(h[1].a32 & 0xFFFF).s, count8(h[1].a8).s);
+            add(" | audio lost %s, late %s", count16(h[1].a32 & 0xFFFF).s, n.late.s);
         }
         if (mask & 4) {
-            add(", underruns %s", count8(h[2].a8).s);
-            if (remote) add(" | mem remote %lu KB (largest %u), local %lu KB", (unsigned long)(h[2].a32 >> 16),
-                            unsigned(h[2].a16), (unsigned long)(h[2].a32 & 0xFFFF));
-            else add(" | mem local %lu KB", (unsigned long)(h[2].a32 & 0xFFFF));
+            add(", underruns %s", n.underruns.s);
+            if (remote) add(" | mem remote %lu KB (largest %lu), local %lu KB", (unsigned long)n.remoteFree,
+                            (unsigned long)n.remoteLargest, (unsigned long)n.localFree);
+            else add(" | mem local %lu KB", (unsigned long)n.localFree);
         }
         if (flags & kHfRecording) add(" | PC using the audio");
     }

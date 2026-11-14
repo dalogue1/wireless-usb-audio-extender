@@ -67,7 +67,7 @@ int main() {
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq), 4) == kInfoRequest);
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq) - 1, 4) == 0);
     // 1.3.6: the noise graph request and data; the version moved on (both boards must match).
-    static_assert(kVersion == 15, "protocol v15");  // 1.4.2: stereo ADPCM speaker audio
+    static_assert(kVersion == 16, "protocol v16");  // 1.4.3: temperature snapshot request
     Header nr;
     fill(nr, kNoiseRequest, 3);
     assert(check(reinterpret_cast<uint8_t*>(&nr), sizeof(nr), 3) == kNoiseRequest);

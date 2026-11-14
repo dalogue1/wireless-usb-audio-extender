@@ -11,7 +11,7 @@ Made for **bird monitoring with [BirdNET-Go](https://github.com/tphakala/birdnet
 * Up to 9 pairs side by side; each shows up as **Extender Mic 1** … **9**.
 * Settings, status and diagnostic reports on the local board's own [USB drive](docs/extender-drive.md).
 
-> **Status:** firmware 1.4.2-dev. The microphone has run for days with BirdNET-Go.
+> **Status:** firmware 1.4.3-dev. The microphone has run for days with BirdNET-Go.
 
 <!-- VIDEO: drag the MP4 (under 10 MB) into GitHub's editor here, or link a YouTube video. -->
 

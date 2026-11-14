@@ -1,0 +1,19 @@
+Wireless USB Audio Extender 1.4.3-dev  (update BOTH boards: radio protocol v16)
+
+1. Remote temperature read no longer hangs the remote (AtomS3U watchdog restarts at
+   0:28 / 10:28 of uptime with temperature = on). The radio is paused only once the
+   audio task has stopped sending and the transmit queue has drained (max 0.4 s);
+   if it doesn't drain, the read is skipped and retried a minute later (logged).
+   The stuck-transmitter watch restarts afresh after each pause. The local board's
+   speaker task gets the same send/pause handshake.
+2. Health snapshots: underruns now count to 65535 and late audio to 4095 (were capped
+   at 255). New record kHealthMem2; older records in the log still read as before.
+3. Remote logs "settings now: ..." after the local board changes a setting (the
+   start-up "settings:" line can show the old saved value). The settings line also
+   shows temperature on/off.
+4. Temperature snapshot when the EXTENDER drive opens, even with temperature = off:
+   the local board asks the remote for one reading (waits up to 4 s) and reads its
+   own; status.txt shows "chip temperature X (read once as the drive opened)".
+Docs/config.txt: one pair per channel (1, 6, 11); temperature notes.
+
+Images: firmware/*-1.4.3-dev-update.bin at 0x10000 keeps settings and event log.

@@ -164,6 +164,7 @@ inline void logSections(Out& out, evlog::Log& log, uint32_t nowS) {
             } else {
                 out.printf("<td>-</td><td>-</td>");
             }
+            const Log::HealthNums hn = Log::healthNums(s.h, s.mask);
             if (s.mask & 2) {
                 const int16_t rt = int16_t(s.h[1].a16), lt = int16_t(s.h[1].a32 >> 16);
                 if (remote && rt != evlog::kTempNone) snprintf(b, sizeof(b), "%.1f", rt / 10.0);
@@ -171,22 +172,22 @@ inline void logSections(Out& out, evlog::Log& log, uint32_t nowS) {
                 if (lt != evlog::kTempNone) snprintf(c, sizeof(c), "%.1f", lt / 10.0);
                 else snprintf(c, sizeof(c), "-");
                 out.printf("<td class=\"n\">%s / %s</td><td class=\"n\">%s</td><td class=\"n\">%s</td>", b, c,
-                           Log::count16(s.h[1].a32 & 0xFFFF).s, Log::count8(s.h[1].a8).s);
+                           Log::count16(s.h[1].a32 & 0xFFFF).s, hn.late.s);
             } else {
                 out.printf("<td>-</td><td>-</td><td>-</td>");
             }
             if (s.mask & 4) {
-                out.printf("<td class=\"n\">%s</td>", Log::count8(s.h[2].a8).s);
-                if (remote) out.printf("<td class=\"n\">%lu / %lu</td>", (unsigned long)(s.h[2].a32 >> 16),
-                                       (unsigned long)(s.h[2].a32 & 0xFFFF));
-                else out.printf("<td class=\"n\">- / %lu</td>", (unsigned long)(s.h[2].a32 & 0xFFFF));
+                out.printf("<td class=\"n\">%s</td>", hn.underruns.s);
+                if (remote) out.printf("<td class=\"n\">%lu / %lu</td>", (unsigned long)hn.remoteFree,
+                                       (unsigned long)hn.localFree);
+                else out.printf("<td class=\"n\">- / %lu</td>", (unsigned long)hn.localFree);
             } else {
                 out.printf("<td>-</td><td>-</td>");
             }
             out.printf("<td>%s</td></tr>\n", (flags & evlog::kHfRecording) ? "yes" : "no");
         }
         put(out, "</table>\n<p class=\"sub\">Audio lost / late / underruns count since the row before. "
-                 "255+ / 65535+: at least that many.</p>\n");
+                 "A count ending in + (255+, 4095+, 65535+): at least that many.</p>\n");
     }
 
     heading(out, "The last 20 events");

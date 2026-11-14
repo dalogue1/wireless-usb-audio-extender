@@ -24,7 +24,7 @@
 | Local LED blinks slowly forever | The remote isn't powered, is out of range, or is on another mic number or channel ([Pairing](pairing.md#remote-and-local-on-different-settings)). Both boards need the same firmware version. |
 | Fast blink, "No microphone signal" | The mic's plug doesn't match the adapter's jack (below), or it isn't pushed fully in. |
 | Fast blink, "Adapter not supported" | `adapter.txt` says why: usually a USB Audio Class 2-only adapter, or no 48 kHz. |
-| Audio drops out | Signal strength and lost audio in `report.html`; try [`distance`](distance.md), the antenna placement, or another `channel`. |
+| Audio drops out | Signal strength and lost audio in `report.html`; try [`distance`](distance.md), the antenna placement, or another `channel`. Another extender pair on the **same channel** is a common cause: give each pair its own ([Pairing](pairing.md#several-mics)). |
 | BirdNET-Go: "No audio sources available" after replugging | Restart its container, or reboot the computer ([below](#restarting-your-software)). |
 | A board seems stuck | Both recover by themselves (below). If in doubt, send `report.html` and `events.txt` from the [drive](extender-drive.md). |
 
@@ -69,7 +69,7 @@ Everything is logged, with the reasons, in `events.txt`.
 The local board also appears as a USB serial port (`/dev/ttyACM0` on Linux, a COM port on Windows, any baud rate). It shows the local board's log and, while linked, the remote's. When a serial monitor connects, the last 64 lines since boot are replayed first.
 
 ```
-    0.9 [local] Wireless USB Audio Extender local 1.4.2-dev | XIAO ESP32-S3 | MAC 28:84:85:...
+    0.9 [local] Wireless USB Audio Extender local 1.4.3-dev | XIAO ESP32-S3 | MAC 28:84:85:...
     0.9 [local] local settings: mic 1 | channel 11 | 240 MHz | distance normal (6 Mbit/s) | remote any
     1.7 [local] linked to remote 34:85:18:...
             [remote]     2.4 USB microphone connected: 12d1:0010 "KT USB Audio", 48000 Hz, 1 ch, 16-bit, ...

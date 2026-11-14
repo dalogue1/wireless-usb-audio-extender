@@ -125,16 +125,34 @@ int main(int argc, char** argv) {
         assert(count(t3, "sends failed 65535+") == 1 && count(t3, "audio lost 65535+, late 255+, underruns 255+") == 1);
         assert(count(t3, ("remote: " + longLine + "\r\n").c_str()) == 1);
         assert(count(t3, "MODE: speaker (no microphone signal at start-up)") == 1);
+        // 1.4.3: kHealthMem2 - underruns and late past 255 (hourly snapshot), and their caps.
+        {
+            const uint8_t fl3 = evlog::kHfLinked | evlog::kHfRemote | evlog::kHfRecording;
+            log.add(evlog::kHealthRadio, 100800, uint8_t(int8_t(-61)), uint16_t(uint8_t(int8_t(-56))) | uint16_t(fl3) << 8, 1u << 16 | 0u);
+            log.add(evlog::kHealthTemp, 100800, 255, uint16_t(evlog::kTempNone), uint32_t(uint16_t(evlog::kTempNone)) << 16 | 2049u);
+            log.add(evlog::kHealthMem2, 100800, 115, 1000, 300u << 20 | 157u << 10 | 64u);
+            log.add(evlog::kHealthRadio, 100900, uint8_t(int8_t(-61)), uint16_t(uint8_t(int8_t(-56))) | uint16_t(fl2) << 8, 0u);
+            log.add(evlog::kHealthTemp, 100900, 255, uint16_t(evlog::kTempNone), uint32_t(uint16_t(evlog::kTempNone)) << 16);
+            log.add(evlog::kHealthMem2, 100900, 255, 65535, 4095u << 20 | 1023u << 10 | 1023u);
+            const std::string t5 = render(log, 101000);
+            if (verbose) { fputs(t5.c_str(), stdout); fflush(stdout); }
+            assert(count(t5, "1d 04:00:00  health (hourly): linked, RSSI -61 dBm (remote hears -56), remote queue 1, sends failed 0"
+                             " | temp remote ?, local ? | audio lost 2049, late 300, underruns 1000"
+                             " | mem remote 157 KB (largest 115), local 64 KB | PC using the audio\r\n") == 1);
+            assert(count(t5, "late 4095+, underruns 65535+ | mem remote 1023 KB (largest 255), local 1023 KB") == 1);
+            // the 1.4.2 record (kHealthMem) still reads as before
+            assert(count(t5, "audio lost 7, late 1, underruns 2 | mem remote 176 KB (largest 135), local 103 KB") == 1);
+        }
         // Shortened to fit a full drive: the oldest lines go, with a note.
         const uint32_t lines = log.lineCount();
         std::string t4;
         evlog::Out o4{[](void* c, const char* x) { *static_cast<std::string*>(c) += x; }, &t4};
-        log.render(o4, 97400, lines - 2);
+        log.render(o4, 101000, lines - 3);  // the last three: the mode change and two 1.4.3 health lines
         assert(count(t4, "the oldest") == 1 && count(t4, "\nstart 1\r\n") == 1 && count(t4, "MODE: speaker") == 1);
         // lines(): health lines are flagged, hourly ones too.
         int healthN = 0, hourlyN = 0;
         log.lines([&](const evlog::Log::LineInfo& i, const char*) { healthN += i.health; hourlyN += i.hourly; });
-        assert(healthN == 4 && hourlyN == 2);
+        assert(healthN == 6 && hourlyN == 3);
         // report.html from the same log: summary counts, hourly rows, last events.
         std::string h;
         report::Out ro{[](void* c, const char* x) { *static_cast<std::string*>(c) += x; }, &h};
@@ -147,6 +165,7 @@ int main(int argc, char** argv) {
         assert(count(h, "<td>start 1, 1d 02:00:00</td><td class=\"bad\">NOT linked</td>") == 1);  // hourly rows only
         assert(count(h, "<td>start 1, 1d 01:01:01</td><td>linked") == 0);                              // (not event ones)
         assert(count(h, "LINK LOST to remote 1") == 2 && count(h, "</html>") == 1);
+        assert(count(h, "<td class=\"n\">2049</td><td class=\"n\">300</td><td class=\"n\">1000</td><td class=\"n\">157 / 64</td>") == 1);
     }
     {   // Restart: next start number, old events kept, new ones after them.
         evlog::Log log;

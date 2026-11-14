@@ -19,7 +19,7 @@
 namespace wlink {
 
 constexpr uint32_t kMagic = 0x314D5557;  // "WUM1" little-endian
-constexpr uint8_t kVersion = 15; // 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
+constexpr uint8_t kVersion = 16; // 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
                                   // temperature + cpu_mhz; v6 = 1.2.4: tx_power; v5 = 1.2.3: mic 1..9;
                                   // v4 = 1.2.2: silent-mic status; v3 = 1.2.0: config.txt
 
@@ -60,7 +60,10 @@ enum Type : uint8_t {
     kNoiseRequest = 11, // local -> remote: send the noise filter's learned signature (drive opening)
     kNoiseData = 12,    // remote -> local: the signature, in 0.1 dB per bin
     kStereoAudio = 13,  // local -> remote (speaker mode): 12 ms of the PC's stereo audio, IMA ADPCM
+    kTempRequest = 14,  // local -> remote: read the chip temperature once now (drive opening);
+                        // the remote's next status carries it even with temperature = off
 };
+constexpr uint32_t kTempSnapshotKeepMs = 30000;  // remote: a snapshot is reported this long
 
 // Which way the audio goes. The remote decides (config.txt `mode`, or auto-detection at
 // start-up) and reports it; the local board presents the matching USB device to the PC.
@@ -175,7 +178,7 @@ struct __attribute__((packed)) StatusPacket {
     uint8_t noSignal;       // 1: the adapter streams, but only silence for 20 s (mic not connected?)
     uint8_t txPowerDbm;     // radio transmit power in effect
     uint8_t cpuMhz;         // processor speed in effect
-    int16_t tempDeciC;      // chip (die) temperature in 0.1 C, or kTempUnknown
+    int16_t tempDeciC;      // chip (die) temperature in 0.1 C, or kTempUnknown (also a snapshot: kTempRequest)
     uint8_t highpassOn;     // high-pass filter in effect
     uint16_t highpassHz;    // its cut-off
     uint8_t temperatureOn;  // 1: reading its chip temperature (tempDeciC valid)

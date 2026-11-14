@@ -16,7 +16,7 @@ You can do this on any computer: the drive doesn't need the remote or any audio 
 
 ```
 mic = 1              # 1-9: the PC sees "Extender Mic N" (both boards follow)
-channel = 11         # Wi-Fi channel 1-11 (both boards follow); pick a quiet one
+channel = 11         # Wi-Fi channel 1-11 (both boards follow); pick a quiet one, one pair per channel
 feedback = voice     # voice or off: spoken announcements in the recording
 noise_filter = on    # on (12 dB), strong (20 dB) or off (at the remote)
 noise_adapt = normal # normal, slow or fast: how quickly the filter follows changes
@@ -24,7 +24,7 @@ tx_power = max       # max, or 2-20 (dBm): radio transmit power of both boards
 cpu_mhz = 240        # 240 or 160: processor speed of both boards (160 runs a little cooler)
 highpass = on        # on, off: remove rumble, wind and hum below highpass_hz (remote)
 highpass_hz = 200    # 50-1000: high-pass cut-off in Hz
-temperature = on     # on, off: log both chips' temperature every 10 min
+temperature = on     # on, off: log both chips' temperature every 10 min (off: read once when the drive opens)
 mic_level = 100      # 0-100: the adapter's microphone level, % of its range; adapter = leave it (AtomS3U: gain)
 distance = normal    # near, normal or far: radio rate of the link (both boards)
 mode = auto          # auto, microphone or speaker: which way the audio goes
@@ -52,7 +52,9 @@ A line the local board can't understand keeps the previous value; the log and `s
 
 `cpu_mhz = 160` (default 240) runs both boards a little cooler; it changes on both at once, without a restart. Lower speeds aren't offered: the radio, USB host and noise filter need the headroom.
 
-With `temperature = on` each board reads its chip temperature once every 10 minutes. The local board logs both, shows the latest and the maximum in `status.txt`, and adds a warning event when either chip reaches 75 °C (again after it has cooled below 70 °C). It is the chip's own temperature, some 10–20 °C above the air. Each reading pauses the radio for about 0.1–0.3 s (the radio uses the same sensor for its own calibration), so that much audio is missing every 10 minutes; the link itself survives. `temperature = off` never touches the sensor.
+With `temperature = on` each board reads its chip temperature once every 10 minutes. The local board logs both, shows the latest and the maximum in `status.txt`, and adds a warning event when either chip reaches 75 °C (again after it has cooled below 70 °C). It is the chip's own temperature, some 10–20 °C above the air. Each reading pauses the radio for about 0.1–0.3 s (the radio uses the same sensor for its own calibration), so that much audio is missing every 10 minutes; the link itself survives. The remote only pauses once its radio queue is empty; if the link is so busy that it doesn't empty, the reading waits a minute and tries again (the log says so).
+
+With `temperature = off` there are no readings while the audio runs. When you open the EXTENDER drive, both boards still read their chip temperature **once** (the audio stops then anyway), and `status.txt` shows it as *read once as the drive opened*. So you always get some idea of how warm the boards run, at no cost to the recording.
 
 ### Mic level
 

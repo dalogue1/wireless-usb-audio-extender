@@ -31,4 +31,4 @@ These matter more than any setting:
 
 ## Choosing a channel
 
-All pairs start on Wi-Fi **channel 11**. If a router nearby uses channel 9–11, a quieter channel helps: set `channel` in `config.txt` (both boards move together). On Linux, `nmcli -f SSID,CHAN,SIGNAL dev wifi list` shows which channels nearby networks use. The extender needs no Wi-Fi network of its own; it only shares the air.
+All pairs start on Wi-Fi **channel 11**. If a router nearby uses channel 9–11, a quieter channel helps: set `channel` in `config.txt` (both boards move together). **With more than one pair, give each its own channel** (1, 6, 11): pairs on one channel share its air time, and a `far` pair alone takes about half of it ([Pairing](pairing.md#several-mics)). On Linux, `nmcli -f SSID,CHAN,SIGNAL dev wifi list` shows which channels nearby networks use. The extender needs no Wi-Fi network of its own; it only shares the air.
