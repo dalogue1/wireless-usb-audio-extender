@@ -59,7 +59,7 @@ int main() {
         assert(!uac::parse(sp, m, uac::Dir::Capture).found);  // not a microphone
         const uac::Playback p = uac::parse(sp, m, uac::Dir::Playback);
         assert(p.found && p.rate48k && p.streamInterface == ac + 1 && p.alt == 1);
-        assert(p.endpoint == ep2 && p.maxPacket == 98 && p.channels == 1 && p.bits == 16 && p.subframe == 2);
+        assert(p.endpoint == ep2 && p.maxPacket == 196 && p.channels == 2 && p.bits == 16 && p.subframe == 2);  // 1.4.2: stereo
         assert(p.syncType == 2);  // adaptive
         assert(p.terminalLink == kSpkTermInput);
         printf("local USB speaker descriptor OK (%u bytes)\n", unsigned(kSpkDescLen));

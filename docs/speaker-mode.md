@@ -2,7 +2,7 @@
 
 [← Back to the main page](../README.md)
 
-The same pair of boards can carry sound the other way. The local board appears on the computer as a USB speaker, **"Extender Speaker 1"**, and the remote plays whatever the computer sends through the audio adapter's headphone output, into a powered speaker.
+The same pair of boards can carry sound the other way. The local board appears on the computer as a stereo USB speaker, **"Extender Speaker 1"**, and the remote plays whatever the computer sends through the audio adapter's headphone output, into a powered speaker.
 
 ![Speaker mode: computer, local board, radio link, remote board, OTG splitter with 5 V power, USB audio adapter, powered speaker](images/speaker-mode.svg)
 
@@ -37,5 +37,17 @@ The local board starts in its last mode straight away (the first time: microphon
 
 * The noise filter, high-pass filter, no-signal check and spoken announcements are not used.
 * The adapter must offer **48 kHz playback** (almost all do). `adapter.txt` shows whether it does.
+* **Stereo:** left and right reach the adapter's left and right outputs. An adapter with mono playback gets the two channels mixed.
+* The sound is compressed for the radio: see [How stereo is sent](#how-stereo-is-sent).
 * The clocks are handled like the microphone, the other way round: the remote keeps a small buffer and gives the adapter 47, 48 or 49 samples each millisecond, following the computer's clock. Nothing is resampled.
 * The serial log's stats line shows the computer side (`PC playing`, packets sent) and the remote's playback buffer (`lost`, `underruns`).
+
+## How stereo is sent
+
+The computer sends the local board full-quality stereo: two channels, 48,000 samples a second each. Sent as it is, that would be twice as much data as the microphone's single channel, and the radio link would have less room left to resend packets when Wi-Fi around it is busy.
+
+So the local board compresses the sound before sending it, with a simple audio codec (IMA ADPCM). Each channel shrinks to a quarter of its size, so both channels together take **half the airtime** of the microphone's mono stream. The remote expands them again and plays left and right through the adapter.
+
+* **Lost packets:** the sound travels in small packets of 12 ms. Each one can be expanded on its own, so a packet lost on the way costs only that 12 ms gap, as in microphone mode, with no click or after-effect on the sound that follows.
+* **Sound quality:** speech and most music sound clean. On very quiet passages and bright, busy sounds (cymbals, for example) you may hear a faint hiss that the original doesn't have.
+* **Microphone mode is not compressed:** the microphone's sound is sent exactly as recorded, so nothing is added to recordings for BirdNET-Go or BirdNET-Pi.

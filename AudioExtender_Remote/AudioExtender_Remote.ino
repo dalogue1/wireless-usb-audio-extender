@@ -9,7 +9,8 @@
 // AOM5024 capsule) on the XIAO's USB-C port in host mode, and streams it over ESP-NOW
 // to the paired local. 48 kHz mono 16-bit, 12 ms per packet.
 // Speaker mode: the other way round - audio from the local board (the PC's "Extender
-// Speaker") is played through the adapter's headphone/speaker output.
+// Speaker") is played through the adapter's headphone/speaker output, in stereo (sent
+// as IMA ADPCM since 1.4.2; a mono adapter gets left + right mixed).
 // config.txt `mode` (auto: decided once when an adapter is plugged in, see decideMode()).
 //
 // Board: Seeed XIAO ESP32-S3 with its antenna attached.
@@ -40,6 +41,7 @@
 #include "HighPass.h"
 #include "AdapterInfo.h"
 #include "JitterBuffer.h"
+#include "Adpcm.h"
 #include "ModeDecision.h"
 #include "BuiltInMic.h"
 #include "esp_heap_caps.h"
@@ -47,7 +49,7 @@
 #include "esp_timer.h"
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.1-dev";
+static const char* kFirmware = "1.4.2-dev";
 static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static board::StatusLed led;
@@ -73,7 +75,7 @@ static std::atomic<uint8_t> audioMode{wlink::kModeMicrophone};
 static std::atomic<uint8_t> modeReason{wlink::kReasonDeciding};
 static bool speaker() { return audioMode.load() == wlink::kModeSpeaker; }
 // Speaker mode: audio from the local board, played to the adapter (USB task pulls 1 ms frames).
-static JitterBuffer speakerJb;
+static StereoJitterBuffer speakerJb;
 // Pairing by MAC (config.txt 'remote'): the one local board this remote links to.
 static uint8_t lockMac[6] = {0};
 static volatile bool locked = false;
@@ -288,14 +290,19 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
         if (type == wlink::kHello) noteRejected(info->src_addr);
         return;
     }
-    if (type == wlink::kAudio) {  // speaker mode: the PC's audio from the local board
+    if (type == wlink::kStereoAudio) {  // speaker mode: the PC's stereo audio from the local board
         if (!linked || !speaker() || memcmp(info->src_addr, localMac, 6) != 0) return;
-        const auto* a = reinterpret_cast<const wlink::AudioPacket*>(data);
-        static int16_t pcm[wlink::kPacketSamples];  // the radio buffer may not be 2-byte aligned
-        const uint16_t n = a->samples;
-        memcpy(pcm, data + offsetof(wlink::AudioPacket, pcm), n * sizeof(int16_t));
-        if (a->h.flags & wlink::kFlagStreamStart) speakerJb.streamStart();
-        speakerJb.pushBlock(a->seq, pcm, n);
+        static wlink::StereoAudioPacket a;  // aligned copy (the radio buffer may not be)
+        memcpy(&a, data, sizeof(a));
+        static int16_t lr[2 * wlink::kPacketSamples];
+        for (int ch = 0; ch < 2; ++ch) {
+            adpcm::Decoder d;
+            d.predictor = a.predictor[ch];
+            d.index = a.index[ch];
+            adpcm::decode(d, a.data + ch * wlink::kAdpcmChannelBytes, wlink::kPacketSamples, lr + ch, 2);
+        }
+        if (a.h.flags & wlink::kFlagStreamStart) speakerJb.streamStart();
+        speakerJb.pushBlock(a.seq, lr, wlink::kPacketSamples);
         lastRxMs = millis();
         if (info->rx_ctrl) rssi = info->rx_ctrl->rssi;
         return;
@@ -556,7 +563,7 @@ static void sendStatus() {
     portEXIT_CRITICAL(&linkMux);
     p.rejected = rejected.load();
     if (speaker()) {
-        const JitterBuffer::Stats js = speakerJb.stats();
+        const StereoJitterBuffer::Stats js = speakerJb.stats();
         p.underrunsKnown = 1;
         p.spkUnderruns = js.underruns;
         p.spkLost = js.lostBlocks;
@@ -645,13 +652,14 @@ static void forwardLogs() {
 
 // While audio comes in, the LED is a level meter (instant rise, ~0.3 s fall),
 // linked or not. Otherwise it shows the link / adapter state.
-// Speaker mode: the USB task asks for each 1 ms frame of the adapter's playback stream.
-static uint16_t playbackFill(int16_t* mono, uint16_t maxSamples) {
-    if (maxSamples < JitterBuffer::kMaxFrame) return 0;
-    const uint16_t n = speakerJb.frame(mono);
+// Speaker mode: the USB task asks for each 1 ms frame of the adapter's playback stream
+// (stereo frames: left, right).
+static uint16_t playbackFill(int16_t* lr, uint16_t maxFrames) {
+    if (maxFrames < StereoJitterBuffer::kMaxFrame) return 0;
+    const uint16_t n = speakerJb.frame(lr);
     uint16_t peak = 0;
-    for (uint16_t i = 0; i < n; ++i) {
-        const int v = mono[i] < 0 ? -int(mono[i]) : mono[i];
+    for (uint16_t i = 0; i < 2 * n; ++i) {
+        const int v = lr[i] < 0 ? -int(lr[i]) : lr[i];
         if (v > peak) peak = uint16_t(v > 32767 ? 32767 : v);
     }
     if (peak > blockPeak.load(std::memory_order_relaxed)) blockPeak.store(peak, std::memory_order_relaxed);

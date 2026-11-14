@@ -13,7 +13,7 @@ Most people only need the [web flasher](https://dalogue1.github.io/wireless-usb-
 | `…-full.bin` | `0x0` | first install: the whole flash; **resets** settings, `config.txt`, voice files and the event log |
 | `…-update.bin` | `0x10000` | updates: the program only; keeps all of those |
 
-With esptool: `esptool --chip esp32s3 write-flash 0x0 wireless-usb-audio-extender-local-1.4.1-dev-full.bin`. **Both boards must run the same version**: the radio protocol changes between versions.
+With esptool: `esptool --chip esp32s3 write-flash 0x0 wireless-usb-audio-extender-local-1.4.2-dev-full.bin`. **Both boards must run the same version**: the radio protocol changes between versions.
 
 The same two images run on the Seeed XIAO ESP32-S3 and the M5Stack [AtomS3U](atoms3u.md): at start-up each reads the chip's factory eFuses (the XIAO's ESP32-S3R8 has PSRAM in the package, the AtomS3U's ESP32-S3FN8 has flash there instead) and picks that board's LED, button and, on the remote, its microphone: a USB audio adapter on the XIAO, the built-in PDM microphone (read through the S3's hardware PDM-to-PCM filter) on the AtomS3U.
 
@@ -62,7 +62,7 @@ firmware/               prebuilt images
 
 **Clock drift ("47/49").** The adapter's crystal and the computer's USB clock never match exactly. The local board keeps about 68 ms of audio in a buffer; each 1 ms USB frame it gives the computer 48 samples, or 49 when the buffer is running full and 47 when it is running empty, the way real asynchronous USB microphones do it. No sample is changed, no resampling. Announcements are mixed in last.
 
-**Speaker path.** The same, reversed: the local board presents a USB speaker and sends the computer's samples in the same packets; the remote keeps the buffer and gives the adapter 47, 48 or 49 samples per millisecond, following the computer's clock.
+**Speaker path.** The same, reversed: the local board presents a stereo USB speaker and sends the computer's samples in 12 ms packets, each channel as IMA ADPCM (4 bits per sample, 596-byte packets: half of a mono 16-bit packet). Every packet carries the encoder's state at its start, so a lost packet costs 12 ms of silence and nothing more. The remote decodes, keeps the buffer and gives the adapter 47, 48 or 49 stereo frames per millisecond, following the computer's clock.
 
 **Settings.** The local board reads `config.txt` at start and sends the remote its share until the remote confirms. A new mic number or channel is saved by the remote, confirmed, and then both boards restart on it.
 

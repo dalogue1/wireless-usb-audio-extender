@@ -79,6 +79,14 @@ int main() {
     assert(pk[0] == 0x34 && pk[1] == 0x12 && pk[2] == 0x34 && pk[3] == 0x12 && pk[4] == 0xFE && pk[7] == 0xFF);
     assert(uac::pack(mono, 2, 1, 3, pk, sizeof(pk)) == 6 && pk[0] == 0 && pk[1] == 0x34 && pk[2] == 0x12);
     assert(uac::pack(mono, 2, 2, 2, pk, 5) == 4);                  // never past the buffer
+    // 1.4: stereo frames (left, right) for stereo, mono and 24-bit adapters.
+    const int16_t lr[4] = {0x1234, -2, 100, 300};
+    assert(uac::packStereo(lr, 2, 2, 2, pk, sizeof(pk)) == 8);
+    assert(pk[0] == 0x34 && pk[1] == 0x12 && pk[2] == 0xFE && pk[3] == 0xFF && pk[4] == 100 && pk[6] == 0x2C && pk[7] == 1);
+    assert(uac::packStereo(lr, 2, 1, 2, pk, sizeof(pk)) == 4);     // mono: (L + R) / 2
+    assert(int16_t(pk[0] | pk[1] << 8) == (0x1234 - 2) / 2 && int16_t(pk[2] | pk[3] << 8) == 200);
+    assert(uac::packStereo(lr, 2, 2, 3, pk, sizeof(pk)) == 12 && pk[0] == 0 && pk[1] == 0x34 && pk[4] == 0xFE);
+    assert(uac::packStereo(lr, 2, 2, 2, pk, 7) == 4);              // never past the buffer
     puts("usb mic descriptor test ok");
     return 0;
 }

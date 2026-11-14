@@ -15,7 +15,7 @@ USB adapter -> UsbMic (int32) -> int16 block (192 samples, 4 ms) -> level meter 
 
 * The level meter and the no-signal check see the audio **as captured**, before the filter.
 * A **high-pass filter** (`shared/HighPass.h`: 2nd-order Butterworth, float, default on at 200 Hz) runs first, so the noise filter's reduction is not spent on rumble below the cut-off. Changing it is not a reason to relearn: the noise floor below the cut-off simply drops and the tracker follows within one tracker window.
-* The filter runs at 48 kHz, mono, 16-bit, the link's only format.
+* The filter runs at 48 kHz, mono, 16-bit, the link's microphone format.
 
 ## Settings
 

@@ -12,6 +12,8 @@
 #include "NoiseSvg.h"
 #include "ReportHtml.h"
 #include "SampleRing.h"
+#include "JitterBuffer.h"
+#include "LinkProtocol.h"
 #include "../AudioExtender_Remote/ModeDecision.h"
 #include <string>
 #include <cmath>
@@ -481,7 +483,101 @@ static void modeTests() {
     CHECK(step(s1, in, wlink::kModeSetSpeaker) == A::None, "mode: setting decided once");
 }
 
+// 1.4.2: stereo speaker audio over the radio as IMA ADPCM, one packet at a time, each
+// decoded on its own from the state it carries; the remote's stereo jitter buffer.
+static double snrDb(const std::vector<int16_t>& ref, const std::vector<int16_t>& got, size_t from) {
+    double sig = 0, err = 0;
+    for (size_t i = from; i < ref.size(); ++i) {
+        sig += double(ref[i]) * ref[i];
+        err += double(ref[i] - got[i]) * (ref[i] - got[i]);
+    }
+    return err > 0 ? 10 * std::log10(sig / err) : 200;
+}
+static void stereoAdpcmTests() {
+    constexpr uint32_t N = wlink::kPacketSamples, kPackets = 200;  // 2.4 s
+    // Left: 1 kHz at -6 dBFS; right: 300 Hz + 5 kHz at -12 dBFS each (different, to catch a swap).
+    std::vector<int16_t> lr(2 * N * kPackets);
+    for (uint32_t i = 0; i < N * kPackets; ++i) {
+        const double t = double(i) / 48000;
+        lr[2 * i] = int16_t(16384 * std::sin(2 * M_PI * 1000 * t));
+        lr[2 * i + 1] = int16_t(8192 * std::sin(2 * M_PI * 300 * t) + 8192 * std::sin(2 * M_PI * 5000 * t));
+    }
+    // The local board's sender.
+    adpcm::Encoder enc[2];
+    std::vector<wlink::StereoAudioPacket> pkts(kPackets);
+    for (uint32_t p = 0; p < kPackets; ++p) {
+        auto& k = pkts[p];
+        wlink::fill(k.h, wlink::kStereoAudio, 1);
+        k.seq = p;
+        k.frames = N;
+        for (int ch = 0; ch < 2; ++ch) {
+            k.predictor[ch] = int16_t(enc[ch].d.predictor);
+            k.index[ch] = uint8_t(enc[ch].d.index);
+            enc[ch].encode(&lr[2 * N * p] + ch, N, 2, k.data + ch * wlink::kAdpcmChannelBytes);
+        }
+        CHECK(wlink::check(reinterpret_cast<const uint8_t*>(&k), sizeof(k), 1) == wlink::kStereoAudio, "stereo packet checks");
+    }
+    // The remote's receiver, packets in any order (each stands alone).
+    std::vector<int16_t> out(lr.size());
+    for (int p = int(kPackets) - 1; p >= 0; --p) {
+        const auto& k = pkts[p];
+        for (int ch = 0; ch < 2; ++ch) {
+            adpcm::Decoder d;
+            d.predictor = k.predictor[ch];
+            d.index = k.index[ch];
+            adpcm::decode(d, k.data + ch * wlink::kAdpcmChannelBytes, N, &out[2 * N * p] + ch, 2);
+        }
+    }
+    std::vector<int16_t> l, r, ol, orr;
+    for (size_t i = 0; i < lr.size(); i += 2) { l.push_back(lr[i]); r.push_back(lr[i + 1]); ol.push_back(out[i]); orr.push_back(out[i + 1]); }
+    const double sl = snrDb(l, ol, 480), sr = snrDb(r, orr, 480);  // after the first 10 ms (step size settles)
+    printf("  ADPCM stereo: left SNR %.1f dB, right %.1f dB, %zu B per 12 ms packet\n", sl, sr, sizeof(wlink::StereoAudioPacket));
+    CHECK(sl > 25 && sr > 25, "ADPCM round trip is clean (> 25 dB SNR per channel)");
+    // Bit-exact against an encoder-side decoder: the per-packet state is exactly the encoder's.
+    adpcm::Encoder ref;
+    bool exact = true;
+    for (uint32_t i = 0; i < N * kPackets && exact; ++i) { ref.next(l[i]); exact = ref.d.predictor == ol[i]; }
+    CHECK(exact, "remote's left channel is bit-exact with the encoder's own reconstruction");
+    // Silence encodes to silence (no idle hiss from the codec).
+    adpcm::Encoder z;
+    uint8_t zb[N / 2];
+    std::vector<int16_t> zs(N, 0), zo(N, 1);
+    z.encode(zs.data(), N, 1, zb);
+    adpcm::Decoder zd;
+    adpcm::decode(zd, zb, N, zo.data(), 1);
+    int32_t zpeak = 0;
+    for (auto v : zo) zpeak = std::max<int32_t>(zpeak, std::abs(int32_t(v)));
+    CHECK(zpeak <= 1, "digital silence stays (almost) silent");
+    // Voice clips still decode as before through the shared header.
+    adpcm::Decoder vd;
+    const uint8_t clip[2] = {0x77, 0x07};
+    CHECK(adpcm::sampleAt(vd, clip, 0) == 11, "voice clip decoding unchanged");
+
+    // Stereo jitter buffer: frames keep their left/right pairing through 47/48/49 and gaps.
+    static StereoJitterBuffer jb;
+    std::vector<int16_t> blk(2 * N);
+    uint32_t v = 0;
+    for (uint32_t p = 0; p < 8; ++p) {
+        for (uint32_t i = 0; i < N; ++i, ++v) { blk[2 * i] = int16_t(v & 0x7FFF); blk[2 * i + 1] = int16_t(-int16_t(v & 0x7FFF)); }
+        if (p != 5) jb.pushBlock(p, blk.data(), N);  // packet 5 lost: 12 ms of silence
+    }
+    int16_t fr[2 * StereoJitterBuffer::kMaxFrame];
+    bool paired = true, sawSilence = false;
+    uint32_t frames = 0;
+    for (int f = 0; f < 60; ++f) {
+        const uint16_t n = jb.frame(fr);
+        for (uint16_t i = 0; i < n; ++i) {
+            if (fr[2 * i] != -fr[2 * i + 1]) paired = false;
+            if (jb.running() && fr[2 * i] == 0 && f > 0) sawSilence = true;
+        }
+        frames += n;
+    }
+    CHECK(paired && frames >= 60 * 47 && jb.stats().lostBlocks == 1, "stereo jitter buffer keeps L/R pairs, fills a lost packet");
+    (void)sawSilence;
+}
+
 int main() {
+    stereoAdpcmTests();
     modeTests();
     svgReportTests();
     usbWatchTests();

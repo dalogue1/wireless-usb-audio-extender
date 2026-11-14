@@ -19,11 +19,11 @@
 namespace wlink {
 
 constexpr uint32_t kMagic = 0x314D5557;  // "WUM1" little-endian
-constexpr uint8_t kVersion = 14; // 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
+constexpr uint8_t kVersion = 15; // 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
                                   // temperature + cpu_mhz; v6 = 1.2.4: tx_power; v5 = 1.2.3: mic 1..9;
                                   // v4 = 1.2.2: silent-mic status; v3 = 1.2.0: config.txt
 
-constexpr uint32_t kSampleRate = 48000;  // fixed: mono, 16-bit, 48 kHz
+constexpr uint32_t kSampleRate = 48000;  // fixed: 48 kHz; microphone: mono 16-bit PCM; speaker: stereo IMA ADPCM
 constexpr uint16_t kBlockSamples = 192;  // 4 ms: the remote's processing block
 constexpr uint16_t kPacketBlocks = 3;    // blocks per audio packet
 constexpr uint16_t kPacketSamples = kBlockSamples * kPacketBlocks;  // 12 ms per packet, 83 packets/s
@@ -59,6 +59,7 @@ enum Type : uint8_t {
     kAdapterInfo = 10,  // remote -> local: one piece of the adapter details
     kNoiseRequest = 11, // local -> remote: send the noise filter's learned signature (drive opening)
     kNoiseData = 12,    // remote -> local: the signature, in 0.1 dB per bin
+    kStereoAudio = 13,  // local -> remote (speaker mode): 12 ms of the PC's stereo audio, IMA ADPCM
 };
 
 // Which way the audio goes. The remote decides (config.txt `mode`, or auto-detection at
@@ -136,6 +137,20 @@ struct __attribute__((packed)) AudioPacket {
     uint32_t seq;      // packet counter, +1 per packet
     uint16_t samples;  // <= kPacketSamples (always kPacketSamples from the remote)
     int16_t pcm[kPacketSamples];
+};
+
+// Speaker mode (local -> remote): 12 ms of the PC's left and right channels, each as IMA
+// ADPCM (4 bits per sample, low nibble first; Adpcm.h). predictor/index are the encoder's
+// state at the start of this packet, so every packet decodes on its own (a lost packet
+// costs 12 ms of silence, nothing more). 590 bytes: half of a mono 16-bit packet.
+constexpr uint16_t kAdpcmChannelBytes = kPacketSamples / 2;
+struct __attribute__((packed)) StereoAudioPacket {
+    Header h;
+    uint32_t seq;          // packet counter, +1 per packet
+    uint16_t frames;       // always kPacketSamples
+    int16_t predictor[2];  // left, right: decoder state at the first sample
+    uint8_t index[2];      // step index 0..88
+    uint8_t data[2 * kAdpcmChannelBytes];  // left channel, then right
 };
 
 struct __attribute__((packed)) PingPacket {
@@ -262,6 +277,7 @@ struct __attribute__((packed)) LogPacket {
 };
 
 static_assert(sizeof(AudioPacket) <= kMaxPacket, "audio packet too big for ESP-NOW v2");
+static_assert(sizeof(StereoAudioPacket) <= kMaxPacket, "stereo audio packet too big");
 static_assert(sizeof(StatusPacket) <= kMaxPacket, "status packet too big");
 static_assert(sizeof(LogPacket) <= kMaxPacket, "log packet too big");
 static_assert(sizeof(AdapterInfoPacket) <= kMaxPacket, "adapter info packet too big");
@@ -296,6 +312,11 @@ inline uint8_t check(const uint8_t* data, int len, uint8_t pairId) {
             const AudioPacket* a = reinterpret_cast<const AudioPacket*>(data);
             if (a->samples > kPacketSamples) return 0;
             return len >= (int)(offsetof(AudioPacket, pcm) + a->samples * sizeof(int16_t)) ? h->type : 0;
+        }
+        case kStereoAudio: {
+            if (len < (int)sizeof(StereoAudioPacket)) return 0;
+            const StereoAudioPacket* a = reinterpret_cast<const StereoAudioPacket*>(data);
+            return a->frames == kPacketSamples && a->index[0] <= 88 && a->index[1] <= 88 ? h->type : 0;
         }
         case kStatus:
             return len >= (int)sizeof(StatusPacket) ? h->type : 0;

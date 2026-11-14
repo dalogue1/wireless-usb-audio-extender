@@ -1,5 +1,5 @@
 #pragma once
-// USB audio (UAC1) host driver, version 1.3.
+// USB audio (UAC1) host driver, version 1.4.
 #include <stddef.h>
 #include <stdint.h>
 
@@ -81,9 +81,11 @@ inline Capture parse(const uint8_t* d, size_t len, Dir dir = Dir::Capture) {
     Capture cur;
     const uint8_t* fmt = nullptr;
     bool pcm = false, haveEp = false;
-    auto score = [](const Capture& c) {
-        // Prefer 48 kHz, then mono (playback: up to 2 channels), then 16-bit; a usable packet size is required.
-        return (c.rate48k ? 100 : 0) + (c.channels <= 2 ? 20 : 0) + (c.channels == 1 ? 10 : 0) + (c.subframe == 2 ? 1 : 0);
+    auto score = [wantIn](const Capture& c) {
+        // Prefer 48 kHz, then up to 2 channels (capture: mono; playback, 1.4: stereo), then 16-bit;
+        // a usable packet size is required.
+        return (c.rate48k ? 100 : 0) + (c.channels <= 2 ? 20 : 0) + (c.channels == (wantIn ? 1 : 2) ? 10 : 0) +
+               (c.subframe == 2 ? 1 : 0);
     };
     auto finish = [&]() {
         if (ifClass == 1 && ifSub == 2 && ifAlt && fmt && pcm && haveEp && bool(cur.endpoint & 0x80) == wantIn) {
@@ -202,6 +204,27 @@ inline size_t pack(const int16_t* mono, size_t n, uint8_t channels, uint8_t subf
     for (size_t i = 0; i < n; ++i) {
         const uint16_t v = uint16_t(mono[i]);
         for (uint8_t ch = 0; ch < channels; ++ch) {
+            for (uint8_t b = 0; b + 2 < subframe; ++b) *o++ = 0;  // low bytes of 24/32-bit samples
+            *o++ = uint8_t(v & 0xFF);
+            *o++ = uint8_t(v >> 8);
+        }
+    }
+    return n * frame;
+}
+
+// One block of interleaved stereo frames (left, right) -> one isochronous OUT packet
+// (1.4): a mono device gets (left + right) / 2; a stereo one left and right; on more
+// channels, even channels get left and odd ones right. Left-aligned for 3- and 4-byte
+// subframes. Returns the bytes written.
+inline size_t packStereo(const int16_t* lr, size_t n, uint8_t channels, uint8_t subframe, uint8_t* out, size_t maxBytes) {
+    const size_t frame = size_t(channels) * subframe;
+    if (!frame) return 0;
+    if (n * frame > maxBytes) n = maxBytes / frame;
+    uint8_t* o = out;
+    for (size_t i = 0; i < n; ++i) {
+        const int16_t l = lr[2 * i], r = lr[2 * i + 1];
+        for (uint8_t ch = 0; ch < channels; ++ch) {
+            const uint16_t v = uint16_t(channels == 1 ? int16_t((int32_t(l) + r) >> 1) : (ch & 1) ? r : l);
             for (uint8_t b = 0; b + 2 < subframe; ++b) *o++ = 0;  // low bytes of 24/32-bit samples
             *o++ = uint8_t(v & 0xFF);
             *o++ = uint8_t(v >> 8);

@@ -21,14 +21,21 @@
 //
 // Single producer / single consumer, lock-free. Plain C++ (no Arduino), so
 // tests/jitter_buffer_test.cpp can simulate it on a PC.
+//
+// JitterBufferT<kCh>: kCh interleaved channels per frame (1.4.2: the remote's speaker
+// buffer is stereo). All counts and positions are in frames (one sample per channel);
+// pcm/out hold n * kCh values. JitterBuffer = the mono one.
 #include <atomic>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
-class JitterBuffer {
+template <uint8_t kCh>
+class JitterBufferT {
+    static_assert(kCh == 1 || kCh == 2, "mono or stereo");
 public:
-    static constexpr uint32_t kCapacity = 8192;            // samples (170 ms), power of two
+    static constexpr uint8_t kChannels = kCh;
+    static constexpr uint32_t kCapacity = 8192;            // frames (170 ms), power of two
     static constexpr uint32_t kTargetSamples = 3264;       // 68 ms: same stall margin as 60 ms had with 4 ms packets
     static constexpr int32_t kHysteresis = 96;             // +-2 ms around the target
     static constexpr uint32_t kMinFramesBetweenAdjust = 16; // max correction ~1300 ppm
@@ -80,7 +87,7 @@ public:
     // starts recording). Safe to call from any context.
     void requestFlush() { flushRequested_.store(true, std::memory_order_release); }
 
-    // Fills one USB frame. Returns the number of samples written to out
+    // Fills one USB frame. Returns the number of frames written to out
     // (47, 48 or 49). Outputs silence while prefilling.
     uint16_t frame(int16_t* out) {
         stats_.frames++;
@@ -127,7 +134,7 @@ public:
             running_ = false;
             copyOut(out, tail, level);
             tail_.store(tail + level, std::memory_order_release);
-            memset(out + level, 0, (n - level) * sizeof(int16_t));
+            memset(out + level * kCh, 0, (n - level) * kCh * sizeof(int16_t));
             return n;
         }
         copyOut(out, tail, n);
@@ -156,7 +163,8 @@ private:
         const uint32_t head = head_.load(std::memory_order_relaxed);
         const uint32_t tail = tail_.load(std::memory_order_acquire);
         if (head - tail + n > kCapacity) return false;
-        for (uint32_t i = 0; i < n; ++i) buf_[(head + i) & kMask] = pcm ? pcm[i] : 0;
+        for (uint32_t i = 0; i < n; ++i)
+            for (uint8_t c = 0; c < kCh; ++c) buf_[((head + i) & kMask) * kCh + c] = pcm ? pcm[i * kCh + c] : 0;
         head_.store(head + n, std::memory_order_release);
         return true;
     }
@@ -168,14 +176,15 @@ private:
         }
     }
     void copyOut(int16_t* out, uint32_t tail, uint32_t n) const {
-        for (uint32_t i = 0; i < n; ++i) out[i] = buf_[(tail + i) & kMask];
+        for (uint32_t i = 0; i < n; ++i)
+            for (uint8_t c = 0; c < kCh; ++c) out[i * kCh + c] = buf_[((tail + i) & kMask) * kCh + c];
     }
     uint16_t silence(int16_t* out, uint16_t n) {
-        memset(out, 0, n * sizeof(int16_t));
+        memset(out, 0, n * kCh * sizeof(int16_t));
         return n;
     }
 
-    int16_t buf_[kCapacity] = {};
+    int16_t buf_[kCapacity * kCh] = {};
     std::atomic<uint32_t> head_{0}, tail_{0};
     std::atomic<bool> flushRequested_{false};
     // writer-owned
@@ -188,3 +197,6 @@ private:
     // counters: each field has a single writer; readers may see slightly stale values
     Stats stats_;
 };
+
+using JitterBuffer = JitterBufferT<1>;
+using StereoJitterBuffer = JitterBufferT<2>;

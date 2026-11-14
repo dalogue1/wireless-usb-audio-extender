@@ -1,5 +1,5 @@
 #pragma once
-// USB audio (UAC1) host driver, version 1.3.
+// USB audio (UAC1) host driver, version 1.4.
 #include <Arduino.h>
 #include "sdkconfig.h"
 
@@ -53,9 +53,10 @@ bool start(uint8_t volumePercent, Direction dir = Direction::Capture);
 // Switch direction: an open device is closed and opened again the other way.
 void setDirection(Direction dir);
 Direction direction();
-// Playback: called in the USB task once per 1 ms packet. Fill up to maxSamples mono
-// samples (normally 47-49) and return how many; 0 sends 1 ms of silence.
-using PlaybackSource = uint16_t (*)(int16_t* mono, uint16_t maxSamples);
+// Playback: called in the USB task once per 1 ms packet. Fill up to maxFrames stereo
+// frames (left, right interleaved; normally 47-49 frames) and return how many; 0 sends
+// 1 ms of silence. A mono device gets (left + right) / 2 (1.4; was mono in 1.3).
+using PlaybackSource = uint16_t (*)(int16_t* lr, uint16_t maxFrames);
 void setPlaybackSource(PlaybackSource src);
 // Close the device and uninstall the host stack (frees the OTG port).
 void stop();

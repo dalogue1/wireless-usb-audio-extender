@@ -4,8 +4,8 @@
 //
 // Microphone mode: receives audio from its paired remote over ESP-NOW and presents
 // it to the PC as a USB microphone ("Extender Mic 1".."9", 48 kHz mono 16-bit).
-// Speaker mode: presents a USB speaker ("Extender Speaker N") and sends what the PC
-// plays to the remote, which plays it through its adapter (config.txt mode).
+// Speaker mode: presents a stereo USB speaker ("Extender Speaker N") and sends what the PC
+// plays to the remote (IMA ADPCM), which plays it through its adapter (config.txt mode).
 // Both: a USB serial port with the logs of both boards.
 //
 // Board: Seeed XIAO ESP32-S3 with its antenna attached.
@@ -34,6 +34,7 @@
 #include "LinkProtocol.h"
 #include "UsbMicDevice.h"
 #include "UsbSpeakerDevice.h"
+#include "Adpcm.h"
 #include "Announcer.h"
 #include "VoiceMixer.h"
 #include "VoiceDrive.h"
@@ -49,7 +50,7 @@
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.1-dev";
+static const char* kFirmware = "1.4.2-dev";
 
 // Time since start from the 64-bit microsecond timer: unlike millis() it does not wrap
 // after 49.7 days, so times in the logs, events.txt and status.txt stay right.
@@ -516,19 +517,24 @@ static bool pcNever() { return false; }  // speaker mode: no announcements
 static bool pcUsing() { return speakerMode() ? usbspkdev::pcPlaying() : usbmicdev::pcRecording(); }
 
 // ---------------------------------------------------------------- speaker mode
-// The PC's samples (USB ISR -> ring) go to the remote in 12 ms packets, like the
-// remote's microphone packets the other way. Its own task, so the drive files or a slow
-// loop never hold the audio up.
+// The PC's stereo samples (USB ISR -> ring) go to the remote in 12 ms packets, like the
+// remote's microphone packets the other way, each channel as IMA ADPCM (1.4.2: half the
+// airtime of mono 16-bit). The encoders run continuously; each packet carries their state
+// at its start, so the remote decodes every packet on its own. Its own task, so the drive
+// files or a slow loop never hold the audio up.
 static std::atomic<uint32_t> spkSent{0}, spkFailed{0};
 static void speakerTask(void*) {
-    static wlink::AudioPacket pkt;
-    static int16_t pcm[wlink::kPacketSamples];
+    static wlink::StereoAudioPacket pkt;
+    static int16_t pcm[2 * wlink::kPacketSamples];  // left, right interleaved
+    adpcm::Encoder enc[2];
     uint32_t seq = 0;
     bool start = true;
     for (;;) {
         if (usbspkdev::takeStreamStart() || !linked || probing || !usbspkdev::pcPlaying()) {
             if (!linked || !usbspkdev::pcPlaying()) usbspkdev::clear();
             start = true;
+            enc[0] = adpcm::Encoder();
+            enc[1] = adpcm::Encoder();
         }
         if (!linked || probing || usbspkdev::available() < wlink::kPacketSamples) {
             vTaskDelay(pdMS_TO_TICKS(2));
@@ -536,19 +542,23 @@ static void speakerTask(void*) {
         }
         usbspkdev::read(pcm, wlink::kPacketSamples);
         uint16_t peak = 0;
-        for (uint16_t i = 0; i < wlink::kPacketSamples; ++i) {
+        for (uint16_t i = 0; i < 2 * wlink::kPacketSamples; ++i) {
             const int v = pcm[i] < 0 ? -int(pcm[i]) : pcm[i];
             if (v > peak) peak = uint16_t(v > 32767 ? 32767 : v);
         }
         if (peak > blockPeak.load(std::memory_order_relaxed)) blockPeak.store(peak, std::memory_order_relaxed);
-        wlink::fill(pkt.h, wlink::kAudio, pairId, start ? wlink::kFlagStreamStart : 0);
+        wlink::fill(pkt.h, wlink::kStereoAudio, pairId, start ? wlink::kFlagStreamStart : 0);
         start = false;
         pkt.seq = seq++;
-        pkt.samples = wlink::kPacketSamples;
-        memcpy(pkt.pcm, pcm, sizeof(pcm));
+        pkt.frames = wlink::kPacketSamples;
+        for (int ch = 0; ch < 2; ++ch) {
+            pkt.predictor[ch] = int16_t(enc[ch].d.predictor);
+            pkt.index[ch] = uint8_t(enc[ch].d.index);
+            enc[ch].encode(pcm + ch, wlink::kPacketSamples, 2, pkt.data + ch * wlink::kAdpcmChannelBytes);
+        }
         esp_err_t err = ESP_FAIL;
         for (int attempt = 0; attempt < 4; ++attempt) {  // the radio queue can be full for a moment
-            err = esp_now_send(remoteMac, (const uint8_t*)&pkt, wlink::audioPacketBytes(pkt.samples));
+            err = esp_now_send(remoteMac, (const uint8_t*)&pkt, sizeof(pkt));
             if (err != ESP_ERR_ESPNOW_NO_MEM) break;
             vTaskDelay(1);
         }
@@ -1619,7 +1629,7 @@ void setup() {
     }
     USB.productName(name);
     USB.manufacturerName("Wireless USB Audio Extender");
-    USB.firmwareVersion(0x0141);
+    USB.firmwareVersion(0x0142);
     USB.onEvent(onUsbEvent);
     LogPort.setTxTimeoutMs(20);  // never stall when no terminal is open
     LogPort.onEvent(onSerialEvent);

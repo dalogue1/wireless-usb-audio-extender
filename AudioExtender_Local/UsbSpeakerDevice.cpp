@@ -14,7 +14,7 @@ uint8_t s_streamItf = 0xFF;
 bool s_registered = false;
 std::atomic<bool> s_streaming{false};
 std::atomic<uint32_t> s_packets{0}, s_starts{0}, s_startsTaken{0};
-SampleRing<4096> s_ring;  // 85 ms (the sender takes 12 ms at a time)
+SampleRing<8192> s_ring;  // interleaved left/right: 4096 frames, 85 ms (the sender takes 12 ms at a time)
 
 }  // namespace
 
@@ -33,13 +33,13 @@ extern "C" uint16_t wum_speaker_load_descriptor(uint8_t* dst, uint8_t* itf) {
 bool tud_audio_rx_done_isr(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out,
                            uint8_t cur_alt_setting) {
     (void)rhport; (void)func_id; (void)ep_out; (void)cur_alt_setting;
-    int16_t pcm[64];
-    uint16_t left = n_bytes_received;
+    int16_t pcm[64];  // whole stereo frames (4 bytes each) per read
+    uint16_t left = n_bytes_received & ~uint16_t(3);
     while (left) {
         const uint16_t want = left > sizeof(pcm) ? sizeof(pcm) : left;
         const uint16_t got = tud_audio_read(pcm, want);
         if (!got) break;
-        if (s_streaming.load(std::memory_order_relaxed)) s_ring.push(pcm, got / 2);
+        if (s_streaming.load(std::memory_order_relaxed) && !(got & 3)) s_ring.push(pcm, got / 2);
         left -= got;
     }
     s_packets.fetch_add(1, std::memory_order_relaxed);
@@ -72,10 +72,10 @@ void onClose(uint8_t itf) {
 
 bool pcPlaying() { return s_streaming.load(); }
 uint32_t packetsReceived() { return s_packets.load(); }
-uint32_t available() { return s_ring.available(); }
-uint32_t read(int16_t* out, uint32_t n) { return s_ring.pop(out, n); }
+uint32_t available() { return s_ring.available() / 2; }
+uint32_t read(int16_t* lr, uint32_t frames) { return s_ring.pop(lr, frames * 2) / 2; }
 void clear() { s_ring.clear(); }
-uint32_t dropped() { return s_ring.dropped(); }
+uint32_t dropped() { return s_ring.dropped() / 2; }
 uint32_t takeStreamStart() {
     const uint32_t n = s_starts.load();
     const uint32_t was = s_startsTaken.exchange(n);

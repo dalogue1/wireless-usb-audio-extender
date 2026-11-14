@@ -69,7 +69,7 @@ Everything is logged, with the reasons, in `events.txt`.
 The local board also appears as a USB serial port (`/dev/ttyACM0` on Linux, a COM port on Windows, any baud rate). It shows the local board's log and, while linked, the remote's. When a serial monitor connects, the last 64 lines since boot are replayed first.
 
 ```
-    0.9 [local] Wireless USB Audio Extender local 1.4.1-dev | XIAO ESP32-S3 | MAC 28:84:85:...
+    0.9 [local] Wireless USB Audio Extender local 1.4.2-dev | XIAO ESP32-S3 | MAC 28:84:85:...
     0.9 [local] local settings: mic 1 | channel 11 | 240 MHz | distance normal (6 Mbit/s) | remote any
     1.7 [local] linked to remote 34:85:18:...
             [remote]     2.4 USB microphone connected: 12d1:0010 "KT USB Audio", 48000 Hz, 1 ch, 16-bit, ...
@@ -86,5 +86,5 @@ Every 10 s a stats line: **lost** = audio packets that never arrived (12 ms of s
 ## Limits
 
 * USB Audio Class 1 adapters only, with 48 kHz. "Hi-Res" USB Audio Class 2-only adapters are refused.
-* One adapter per remote (no USB hub), and one channel (mono).
+* One adapter per remote (no USB hub). The microphone is one channel (mono); speaker mode is stereo.
 * One direction at a time: microphone or speaker.

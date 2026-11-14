@@ -11,7 +11,7 @@ Made for **bird monitoring with [BirdNET-Go](https://github.com/tphakala/birdnet
 * Up to 9 pairs side by side; each shows up as **Extender Mic 1** … **9**.
 * Settings, status and diagnostic reports on the local board's own [USB drive](docs/extender-drive.md).
 
-> **Status:** firmware 1.4.1-dev. The microphone has run for days with BirdNET-Go.
+> **Status:** firmware 1.4.2-dev. The microphone has run for days with BirdNET-Go.
 
 <!-- VIDEO: drag the MP4 (under 10 MB) into GitHub's editor here, or link a YouTube video. -->
 
@@ -64,7 +64,7 @@ Snap the antennas on before powering the boards, keep the local board's antenna 
 * **[Noise and high-pass filters](docs/noise-filter.md)**: how the filters work, and how to read the noise graph
 * **[Distance and range](docs/distance.md)**: the `distance` setting, antennas, channels, transmit power
 * **[Pairing and several mics](docs/pairing.md)**: mic numbers, channels, locking a pair to each other
-* **[Speaker mode](docs/speaker-mode.md)**: the same boards as a wireless speaker
+* **[Speaker mode](docs/speaker-mode.md)**: the same boards as a wireless stereo speaker
 * **[Voice feedback](docs/voice-feedback.md)**: the spoken announcements, other languages, your own voice
 * **[LEDs and troubleshooting](docs/troubleshooting.md)**: what the lights mean, common problems, recovery, the serial log
 * **[AtomS3U boards](docs/atoms3u.md)**: an even simpler extender from USB-stick-sized boards with a built-in mic

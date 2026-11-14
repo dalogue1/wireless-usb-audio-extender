@@ -1,8 +1,16 @@
 #pragma once
-// IMA ADPCM (4 bits per sample) decoder for the built-in voice clips.
-// tools/make_voice.py writes the matching encoder output into voice_clips.h:
-// low nibble first, predictor and step index start at 0 for every clip.
-// Plain C++ (tests/voice_clips_test.cpp decodes on the host).
+// IMA ADPCM (4 bits per sample).
+//
+// SHARED FILE: an identical copy lives in AudioExtender_Remote/ and
+// AudioExtender_Local/. Edit shared/Adpcm.h and run tools/sync_shared.sh.
+//
+// Two uses:
+// * The built-in voice clips (local board): tools/make_voice.py writes the encoder output
+//   into voice_clips.h, low nibble first, predictor and step index starting at 0 per clip.
+// * Speaker mode's stereo radio link (1.4.2): the local board encodes the PC's left and
+//   right channels (Encoder), the remote decodes them (Decoder). Each packet carries the
+//   encoder state it started from, so a lost packet never upsets the next one.
+// Plain C++ (host-tested).
 #include <stdint.h>
 
 namespace adpcm {
@@ -34,6 +42,41 @@ struct Decoder {
         return int16_t(predictor);
     }
 };
+
+// The standard IMA encoder. It runs the decoder on its own output, so both stay in step.
+struct Encoder {
+    Decoder d;
+
+    uint8_t next(int16_t sample) {
+        const int step = kStepTable[d.index];
+        int diff = int(sample) - int(d.predictor);
+        uint8_t nibble = 0;
+        if (diff < 0) { nibble = 8; diff = -diff; }
+        if (diff >= step) { nibble |= 4; diff -= step; }
+        if (diff >= (step >> 1)) { nibble |= 2; diff -= step >> 1; }
+        if (diff >= (step >> 2)) nibble |= 1;
+        d.next(nibble);
+        return nibble;
+    }
+    // n samples (even) -> n/2 bytes, low nibble first.
+    void encode(const int16_t* in, uint32_t n, uint32_t stride, uint8_t* out) {
+        for (uint32_t i = 0; i + 1 < n; i += 2) {
+            const uint8_t lo = next(in[i * stride]);
+            const uint8_t hi = next(in[(i + 1) * stride]);
+            out[i >> 1] = uint8_t(lo | (hi << 4));
+        }
+    }
+};
+
+// n samples (even) from n/2 bytes, written every `stride` values (2: one channel of
+// interleaved stereo).
+inline void decode(Decoder& d, const uint8_t* in, uint32_t n, int16_t* out, uint32_t stride) {
+    for (uint32_t i = 0; i + 1 < n; i += 2) {
+        const uint8_t b = in[i >> 1];
+        out[i * stride] = d.next(b & 15);
+        out[(i + 1) * stride] = d.next(b >> 4);
+    }
+}
 
 // Sample i of a clip, decoding sequentially (call with i = 0, 1, 2, ...).
 inline int16_t sampleAt(Decoder& d, const uint8_t* data, uint32_t i) {

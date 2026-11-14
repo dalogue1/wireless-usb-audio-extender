@@ -67,7 +67,7 @@ int main() {
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq), 4) == kInfoRequest);
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq) - 1, 4) == 0);
     // 1.3.6: the noise graph request and data; the version moved on (both boards must match).
-    static_assert(kVersion == 14, "protocol v14");  // 1.4.0: board kind in the status
+    static_assert(kVersion == 15, "protocol v15");  // 1.4.2: stereo ADPCM speaker audio
     Header nr;
     fill(nr, kNoiseRequest, 3);
     assert(check(reinterpret_cast<uint8_t*>(&nr), sizeof(nr), 3) == kNoiseRequest);
@@ -76,8 +76,21 @@ int main() {
     assert(check(reinterpret_cast<uint8_t*>(&np), sizeof(np), 3) == kNoiseData);
     assert(check(reinterpret_cast<uint8_t*>(&np), sizeof(np) - 1, 3) == 0);
     Header old = nr;
-    old.version = 13;
-    assert(check(reinterpret_cast<uint8_t*>(&old), sizeof(old), 3) == 0);  // 1.3.6 packets are ignored
+    old.version = 14;
+    assert(check(reinterpret_cast<uint8_t*>(&old), sizeof(old), 3) == 0);  // 1.4.1 packets are ignored
+    // 1.4.2: stereo speaker audio, IMA ADPCM.
+    static StereoAudioPacket sa = {};
+    fill(sa.h, kStereoAudio, 2);
+    sa.frames = kPacketSamples;
+    const uint8_t* sb = reinterpret_cast<const uint8_t*>(&sa);
+    assert(sizeof(sa) == 8 + 4 + 2 + 4 + 2 + 576 && sizeof(sa) * 2 < audioPacketBytes(kPacketSamples) + 64);
+    assert(check(sb, sizeof(sa), 2) == kStereoAudio);
+    assert(check(sb, sizeof(sa) - 1, 2) == 0);                     // short
+    sa.frames = kPacketSamples - 1;
+    assert(check(sb, sizeof(sa), 2) == 0);                         // wrong frame count
+    sa.frames = kPacketSamples; sa.index[1] = 89;
+    assert(check(sb, sizeof(sa), 2) == 0);                         // step index out of range
+    printf("stereo ADPCM packet %zu B (mono PCM %zu B)\n", sizeof(sa), audioPacketBytes(kPacketSamples));
     static_assert(sizeof(StatusPacket) <= kMaxPacket, "status fits");
     assert(strcmp(boardName(kBoardAtomS3U), "AtomS3U") == 0 && strcmp(boardName(kBoardXiao), "XIAO ESP32-S3") == 0);
     printf("noise %zu B, beacon %zu B, config %zu B, status %zu B\n", sizeof(NoisePacket), sizeof(BeaconPacket),

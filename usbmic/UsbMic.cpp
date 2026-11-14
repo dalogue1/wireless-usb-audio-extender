@@ -1,4 +1,4 @@
-// USB audio (UAC1) host driver, version 1.3.
+// USB audio (UAC1) host driver, version 1.4.
 #include "UsbMic.h"
 #include "UacDescriptors.h"
 
@@ -192,13 +192,13 @@ void isoCallback(usb_transfer_t* t) {
 // Fills every packet of an OUT transfer from the application's source (packed back
 // to back, each packet's own size: 47-49 samples follow the source's drift control).
 void fillOut(usb_transfer_t* t) {
-    int16_t mono[64];
+    int16_t lr[2 * 64];
     size_t offset = 0;
     const PlaybackSource src = playSource.load();
     for (int i = 0; i < t->num_isoc_packets; ++i) {
-        uint16_t n = src ? src(mono, 49) : 0;
-        if (!n || n > 49) { n = 48; memset(mono, 0, sizeof(mono)); }
-        const size_t bytes = uac::pack(mono, n, cap.channels, cap.subframe, t->data_buffer + offset, cap.maxPacket);
+        uint16_t n = src ? src(lr, 49) : 0;
+        if (!n || n > 49) { n = 48; memset(lr, 0, sizeof(lr)); }
+        const size_t bytes = uac::packStereo(lr, n, cap.channels, cap.subframe, t->data_buffer + offset, cap.maxPacket);
         t->isoc_packet_desc[i].num_bytes = int(bytes);
         offset += bytes;
     }
