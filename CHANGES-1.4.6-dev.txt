@@ -1,0 +1,19 @@
+Wireless USB Audio Extender 1.4.6-dev  (radio protocol v19, same as 1.4.5: the boards
+still link with each other, but update both)
+
+From the AtomS3U test outdoors at about -80 dBm (distance = far): the link was fine for
+most of the hour, but in two fades of a few minutes the remote restarted itself three
+times and the recording had 0.5-2 s silences.
+
+- Remote: no more restarts for a weak signal. The "stuck transmitter" restart now needs
+  the radio itself to go quiet (packets waiting, no send report for 2 s) or nothing
+  acknowledged for 5 s. 1.4.5 restarted after 500 ms without an acknowledgement, which a
+  fade easily causes; each restart cost about 3 s of audio and reset the noise filter.
+- Remote: at most 8 audio packets (96 ms) wait in the radio. When it is fuller, the new
+  packet is skipped (the local board counts it as lost: 12 ms of silence) instead of
+  queueing audio that would arrive too late to play. 1.4.5 let 36 packets (430 ms) pile
+  up, which also held up the link's own messages. The remote's log says once a minute
+  how many it skipped.
+- Drive opening: the local board waits up to 8 s (was 4 s) for the remote's temperature
+  reading; without one, status.txt and the event log say how often it asked and how long
+  it waited, and the remote's own temperature lines go into the event log.

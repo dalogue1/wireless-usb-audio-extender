@@ -55,7 +55,7 @@ Other recording software may need the same: if audio doesn't come back after a r
 ## Automatic recovery
 
 * **Short dropouts** (interference, someone walking past) recover by themselves within a second or two.
-* **Remote radio stuck:** the remote recognises when its radio has stopped getting packets through and restarts itself; audio is back within about 3–6 s.
+* **Remote radio stuck:** the remote recognises when its radio has stopped sending (nothing reported for 2 s, or nothing acknowledged for 5 s) and restarts itself; audio is back within about 3–6 s. A weak signal is not a stuck radio: the remote keeps going and skips audio it can't get through in time, so a fade costs short gaps rather than a restart.
 * **Link down for longer:** after 15 s the local board restarts its radio (not the board, so the computer keeps the microphone, sending silence); after 20 s the remote restarts itself completely, which also clears a stuck USB host.
 * **Program hang:** on either board, a watchdog restarts it after 5 s.
 * **USB to the computer:** if the computer hasn't set the local board up for 30 s, or stops collecting audio for 5 s while the stream is open, the board disconnects and reconnects itself in software, as if replugged. A sleeping computer (suspended USB) is left alone.
@@ -69,7 +69,7 @@ Everything is logged, with the reasons, in `events.txt`.
 The local board also appears as a USB serial port (`/dev/ttyACM0` on Linux, a COM port on Windows, any baud rate). It shows the local board's log and, while linked, the remote's. When a serial monitor connects, the last 64 lines since boot are replayed first.
 
 ```
-    0.9 [local] Wireless USB Audio Extender local 1.4.5-dev | XIAO ESP32-S3 | MAC 28:84:85:...
+    0.9 [local] Wireless USB Audio Extender local 1.4.6-dev | XIAO ESP32-S3 | MAC 28:84:85:...
     0.9 [local] local settings: mic 1 | channel 11 | 240 MHz | distance normal (6 Mbit/s, mu-law audio) | remote any
     1.7 [local] linked to remote 34:85:18:...
             [remote]     2.4 USB microphone connected: 12d1:0010 "KT USB Audio", 48000 Hz, 1 ch, 16-bit, ...

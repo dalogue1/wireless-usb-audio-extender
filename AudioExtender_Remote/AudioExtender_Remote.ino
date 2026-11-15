@@ -49,7 +49,7 @@
 #include "esp_timer.h"
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.5-dev";
+static const char* kFirmware = "1.4.6-dev";
 static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static board::StatusLed led;
@@ -121,6 +121,7 @@ static std::atomic<bool> audioSending{false};  // the audio task is inside sendA
 // Packets handed to the radio (esp_now_send OK) and send reports back from it; the
 // difference is what sits in the radio's transmit queue.
 static std::atomic<uint32_t> submitted{0}, reports{0}, lastReportMs{0};
+static std::atomic<uint32_t> audioSkipped{0};  // 1.4.6: audio packets skipped, radio backed up
 static uint32_t radioQueued() { return submitted.load() - reports.load(); }
 static esp_err_t radioSend(const uint8_t* mac, const void* data, size_t len) {
     const esp_err_t err = esp_now_send(mac, (const uint8_t*)data, len);
@@ -435,6 +436,12 @@ static void sendAudio(wlink::AudioPacket& pkt, const int16_t* pcm, uint32_t& seq
         pkt.seq = seq++;
         pkt.samples = wlink::kPacketSamples;
         outLen = wlink::audioPacketBytes(pkt.samples);
+    }
+    // 1.4.6: radio backed up (weak signal, retries): skip this packet rather than queue
+    // audio that would arrive too late; the local board counts the gap as lost.
+    if (radioQueued() >= wlink::kMaxAudioQueued) {
+        audioSkipped++;
+        return;
     }
     // The ESP-NOW queue can be momentarily full (e.g. log lines going out
     // right after linking): wait a moment and retry rather than lose 12 ms.
@@ -1122,6 +1129,7 @@ static void startRadioAgain() {
     if (linked) board::addPeer(localMac, true, distance);
     // The pause is not a stuck transmitter: start its watch afresh.
     lastSendOkMs = millis();
+    lastReportMs = millis();
     errStreak = 0;
     ackStreak = 0;
     radioPaused = false;
@@ -1218,11 +1226,16 @@ void loop() {
             lastStatus = 0;  // report the adapter right away
         }
     }
-    // Stuck transmitter: sends stopped succeeding while the local board is still heard.
+    // Stuck transmitter: the radio went quiet (packets waiting, no send report at all), or
+    // nothing acknowledged for 5 s, while the local board is still heard (1.4.6; see
+    // LinkProtocol.h). Failing sends with reports still coming = a weak signal: no restart.
+    const uint32_t lastRep = lastReportMs.load();
+    const bool radioSilent = radioQueued() != 0 && lastRep && int32_t(now - lastRep) > int32_t(wlink::kTxStuckSilentMs);
+    const bool noAck = int32_t(now - lastSendOkMs.load()) > int32_t(wlink::kTxStuckNoAckMs);
     if (linked && now - linkedSinceMs > wlink::kTxStuckArmMs && !radioPaused.load() &&
-        int32_t(now - lastSendOkMs.load()) > int32_t(wlink::kTxStuckMs) &&
+        (radioSilent || noAck) &&
         errStreak.load() + ackStreak.load() >= wlink::kTxStuckFails &&
-        int32_t(now - lastRxMs) < int32_t(wlink::kTxStuckMs)) {
+        int32_t(now - lastRxMs) < int32_t(wlink::kLinkTimeoutMs)) {
         snapshotDrop(now);
         dropNote = drop;
         dropNote.why = kWhyTxStuck;
@@ -1306,6 +1319,16 @@ void loop() {
         }
     }
     if (tempSnapshotMs && now - tempSnapshotMs > wlink::kTempSnapshotKeepMs) tempSnapshotMs = 0;
+    // 1.4.6: once a minute at most, how much audio was skipped with the radio backed up.
+    static uint32_t skipLogMs = 0, skipLogged = 0;
+    if (now - skipLogMs >= 60000) {
+        skipLogMs = now;
+        const uint32_t sk = audioSkipped.load();
+        if (sk != skipLogged)
+            logf("audio skipped, radio backed up (weak signal): %lu packets in the last minute",
+                 (unsigned long)(sk - skipLogged));
+        skipLogged = sk;
+    }
     forwardLogs();
     updateLed();
     delay(2);

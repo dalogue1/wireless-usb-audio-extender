@@ -50,7 +50,7 @@
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.5-dev";
+static const char* kFirmware = "1.4.6-dev";
 
 // Time since start from the 64-bit microsecond timer: unlike millis() it does not wrap
 // after 49.7 days, so times in the logs, events.txt and status.txt stay right.
@@ -254,7 +254,7 @@ static void flushRemotePending() {
 static bool remoteLineIsCritical(const char* t) {
     static const char* const kWords[] = {"restart", "ERROR", "WARNING", "stuck", "crash", "watchdog", "brownout",
                                          "Audio Extender remote", "remote settings:", "link-loss", "while searching", "mode:",
-                                         "locked to", "unlocked"};
+                                         "locked to", "unlocked", "chip temperature"};
     if (strncmp(t, "settings: ", 10) == 0) return true;  // the remote's start-up settings line
     for (const char* w : kWords)
         if (strstr(t, w)) return true;
@@ -1096,6 +1096,8 @@ static void syncAdapterInfo() {
 // status.txt: what is in effect right now (both boards). events.txt says what happened.
 // Also the top of report.html. Written when the drive opens, after waiting for the remote.
 static char noiseWhy[112] = "";  // why there is no noise.svg ("" = there is one)
+static uint8_t tempAsks = 0;        // 1.4.6: temperature requests sent while the drive opened
+static char tempWhy[48] = "";       // 1.4.6: why the remote sent no reading then
 static bool driveRemoteLate = false;  // the drive opened without a fresh status from the remote
 
 static void renderStatus(evlog::Out& f) {
@@ -1174,8 +1176,8 @@ static void renderStatus(evlog::Out& f) {
             f.printf("  processor %u MHz, chip temperature %s (read as the drive opened)\r\n", unsigned(s.cpuMhz),
                      board::tempText(s.tempDeciC).c_str());
         else if (s.tempDeciC != wlink::kTempUnknown)
-            f.printf("  processor %u MHz, chip temperature %s (read at the remote's start; no reading as the drive opened)\r\n",
-                     unsigned(s.cpuMhz), board::tempText(s.tempDeciC).c_str());
+            f.printf("  processor %u MHz, chip temperature %s (read at the remote's start; no reading as the drive opened: %s)\r\n",
+                     unsigned(s.cpuMhz), board::tempText(s.tempDeciC).c_str(), tempWhy[0] ? tempWhy : "no answer");
         else
             f.printf("  processor %u MHz, chip temperature not read (the remote did not answer in time)\r\n",
                      unsigned(s.cpuMhz));
@@ -1434,7 +1436,8 @@ static void serviceDriveOpening() {
         esp_now_send(remoteMac, (const uint8_t*)&h, sizeof(h));
     }
     // The remote reads its chip temperature once, on request (1.4.3; the only read after its start since 1.4.4);
-    // its next status carries it. Asked once a second; at most 4 s spent waiting for it.
+    // its next status carries it. Asked once a second; at most 8 s spent waiting for it
+    // (1.4.6, was 4 s: on a weak link the pause, the read and the answer can take longer).
     static uint32_t lastTempAsk = 0, firstTempAsk = 0;
     const bool wantTemp = fresh;
     const bool haveTemp = s.tempFresh && s.tempDeciC != wlink::kTempUnknown;
@@ -1444,11 +1447,17 @@ static void serviceDriveOpening() {
         wlink::Header h;
         wlink::fill(h, wlink::kTempRequest, pairId);
         esp_now_send(remoteMac, (const uint8_t*)&h, sizeof(h));
+        tempAsks++;
     }
-    const bool tempDone = !wantTemp || haveTemp || (firstTempAsk && now - firstTempAsk > 4000);
+    const bool tempDone = !wantTemp || haveTemp || (firstTempAsk && now - firstTempAsk > 8000);
     const bool done = fresh && (!graph || haveNoise) && tempDone;
     if (!done && now - driveClickMs < 15000) return;
     driveRemoteLate = !fresh;
+    if (fresh && !haveTemp) {  // 1.4.6: say why there is no reading (status.txt and the event log)
+        snprintf(tempWhy, sizeof(tempWhy), "asked %u times, no answer in %lu s", unsigned(tempAsks),
+                 (unsigned long)((now - (firstTempAsk ? firstTempAsk : now)) / 1000));
+        evText(0, "remote chip temperature not read as the drive opened: %s", tempWhy);
+    }
     if (!fresh) noiseWanted(s, false);  // sets noiseWhy
     bool haveGraph = graph && haveNoise && noise.valid;
     if (graph && haveNoise && !noise.valid) snprintf(noiseWhy, sizeof(noiseWhy), "the remote had no learned signature to send");
@@ -1667,7 +1676,7 @@ void setup() {
     }
     USB.productName(name);
     USB.manufacturerName("Wireless USB Audio Extender");
-    USB.firmwareVersion(0x0145);
+    USB.firmwareVersion(0x0146);
     USB.onEvent(onUsbEvent);
     LogPort.setTxTimeoutMs(20);  // never stall when no terminal is open
     LogPort.onEvent(onSerialEvent);

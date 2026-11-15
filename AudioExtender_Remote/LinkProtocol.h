@@ -38,10 +38,18 @@ constexpr uint32_t kLinkTimeoutMs = 2000; // no packet from the peer -> unlinked
 constexpr uint32_t kRecoverAfterMs = 15000;      // local restarts its radio
 constexpr uint32_t kRemoteStuckBeacons = 10;     // remote: beacons in a row its radio refuses (2 s) -> restart
 constexpr uint32_t kRemoteRestartMs = 20000;     // remote restarts itself if the link stays down
-// Remote: a stuck transmitter shows as sends that stop succeeding while the local board is
-// still heard (interference or range cut both directions). Restart after kTxStuckMs of that,
-// once the link has been up for kTxStuckArmMs (bounds any restart loop).
-constexpr uint32_t kTxStuckMs = 500, kTxStuckFails = 5, kTxStuckArmMs = 10000;
+// Remote: a stuck transmitter restarts the remote while the local board is still heard,
+// once the link has been up for kTxStuckArmMs (bounds any restart loop). 1.4.6: "stuck"
+// means the radio itself went quiet - packets waiting but no send report at all for
+// kTxStuckSilentMs - or no send acknowledged for kTxStuckNoAckMs. A weak signal (send
+// reports still coming, failing) is not stuck: restarting there only adds ~3 s of silence
+// (1.4.5 restarted after 500 ms without an acknowledgement).
+constexpr uint32_t kTxStuckSilentMs = 2000, kTxStuckNoAckMs = 5000, kTxStuckFails = 5, kTxStuckArmMs = 10000;
+// Remote, 1.4.6: at most this many packets waiting in the radio before a new audio packet is
+// skipped (8 = 96 ms). Older audio would reach the local board too late for its 150 ms
+// buffer, and a full queue holds up the link's own messages. The local board counts a
+// skipped packet as lost (12 ms of silence).
+constexpr uint32_t kMaxAudioQueued = 8;
 constexpr uint32_t kRecoverRepeatMs = 300000;    // local: again every 5 min while still unlinked
 
 constexpr size_t kMaxPacket = 1470;       // ESP_NOW_MAX_DATA_LEN_V2
