@@ -26,11 +26,10 @@ Where Mic and Ground are on the plug:
 
 | Plug | Tip | Ring 1 | Ring 2 | Sleeve |
 |:---|:---|:---|:---|:---|
-| **TRRS** (the usual standard, also called CTIA) | left (not used) | right (not used) | **Ground** | **Mic** |
-| **TRRS**, older OMTP standard | left (not used) | right (not used) | **Mic** | **Ground** |
+| **TRRS** | left (not used) | right (not used) | **Ground** | **Mic** |
 | **TRS** (pink mic jack) | **Mic** | (not used) | – | **Ground** |
 
-Nearly all current USB audio adapters use the usual (CTIA) TRRS standard. If a TRRS build gives silence, the adapter may be one of the older OMTP ones: swap Mic and Ground.
+This TRRS order (also called CTIA) is the one USB audio adapters use. Wiring diagrams online sometimes show an older order with Mic and Ground swapped (OMTP, from old Nokia phones): don't use it, it gives silence on these adapters.
 
 ## Examples
 
