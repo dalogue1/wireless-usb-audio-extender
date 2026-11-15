@@ -1,0 +1,10 @@
+Wireless USB Audio Extender 1.4.4-dev  (update BOTH boards: radio protocol v17)
+
+Chip temperature is no longer read while audio streams. Each board reads it:
+  - at its start, before its radio starts (no radio pause; in events.txt), and
+  - when the EXTENDER drive opens (the audio stops then anyway; in status.txt).
+The 10-minute reads are gone: each needed the radio stopped, cost a short audio gap,
+and 1.4.3 still saw the AtomS3U remote restart at its first read with an empty queue.
+The `temperature` setting is removed; an old line in config.txt is ignored.
+Hourly/event health lines no longer show temperatures. 75 C warnings remain (start and
+drive-opening readings).

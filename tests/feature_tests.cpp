@@ -90,10 +90,9 @@ static void configTests() {
     CHECK(r.errors == 0 && r.settings.highpass == 0 && r.settings.highpassHz == 350, "highpass off, 350 Hz");
     r = cfg::parse("highpass = maybe\nhighpass_hz = 20\nhighpass_hz = 5000\n", base);
     CHECK(r.errors == 3 && r.settings.highpass == 1 && r.settings.highpassHz == 200, "bad highpass values refused, defaults on / 200 Hz");
-    r = cfg::parse("temperature = off\n", base);
-    CHECK(r.errors == 0 && r.settings.temperature == 0, "temperature off");
-    r = cfg::parse("temperature = 1\n", base);
-    CHECK(r.errors == 1 && r.settings.temperature == 1, "temperature only on/off, default on");
+    // 1.4.4: `temperature` removed; an old line is accepted and changes nothing
+    r = cfg::parse("temperature = off\ntemperature = on\n", base);
+    CHECK(r.errors == 0 && r.settings == base, "old temperature lines ignored");
     r = cfg::parse("", base);
     CHECK(r.errors == 0 && r.settings == base, "empty file changes nothing");
     // 1.3.6: distance, mode, remote (pairing by MAC)
@@ -112,7 +111,7 @@ static void configTests() {
     CHECK(cfg::Settings().distance == 0 && cfg::Settings().mode == 0 && !cfg::Settings().lock, "defaults: normal, auto, any");
     char text[2600];
     cfg::Settings d;
-    d.mic = 2; d.channel = 9; d.feedback = cfg::kFeedbackOff; d.filter = 1; d.adapt = 2; d.txPower = 11; d.cpuMhz = 160; d.highpass = 0; d.highpassHz = 1000; d.temperature = 0;
+    d.mic = 2; d.channel = 9; d.feedback = cfg::kFeedbackOff; d.filter = 1; d.adapt = 2; d.txPower = 11; d.cpuMhz = 160; d.highpass = 0; d.highpassHz = 1000;
     d.distance = 2; d.mode = 1; d.lock = true;
     const uint8_t mac[6] = {0x44, 0xBD, 0x8D, 0x76, 0xCA, 0x44};
     memcpy(d.remoteMac, mac, 6);

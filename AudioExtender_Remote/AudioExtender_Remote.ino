@@ -49,7 +49,7 @@
 #include "esp_timer.h"
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.3-dev";
+static const char* kFirmware = "1.4.4-dev";
 static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static board::StatusLed led;
@@ -65,13 +65,13 @@ static HoldButton bootButton;
 static std::atomic<uint8_t> adaptSpeed{wlink::kAdaptNormal};
 static uint8_t txPowerDbm = wlink::kMaxTxPowerDbm;
 static uint8_t cpuMhz = wlink::kCpuMhzDefault;
-static bool temperatureOn = false;  // config.txt 'temperature', from the local board
 static uint8_t micLevel = wlink::kLevelDefault;  // config.txt 'mic_level': 0..100 %, or default
-static int16_t chipTemp = wlink::kTempUnknown;  // latest reading (once every 10 min while on)
-// A one-off reading the local board asked for (kTempRequest, when its drive opens): reported
-// in the status for wlink::kTempSnapshotKeepMs even with temperature = off.
+// Chip temperature (1.4.4): read at start, before the radio starts, and again only when the
+// local board's drive opens (kTempRequest; the audio stops then anyway). Never while
+// audio streams: each read needs the radio stopped, and restarting it could hang this board.
+static int16_t chipTemp = wlink::kTempUnknown;
 static std::atomic<bool> tempRequested{false};
-static uint32_t tempSnapshotMs = 0;  // millis() of the snapshot, 0 = none
+static uint32_t tempSnapshotMs = 0;  // millis() of the drive-opening reading, 0 = none (tempFresh)
 static uint8_t distance = wlink::kDistanceNormal;  // config.txt 'distance': radio rate of the link
 // Audio direction: config.txt 'mode' (saved), and what is in effect (decideMode()).
 static uint8_t modeSetting = wlink::kModeAuto;
@@ -545,10 +545,10 @@ static void sendStatus() {
     p.noSignal = noSignal.load() ? 1 : 0;
     p.txPowerDbm = txPowerDbm;
     p.cpuMhz = uint8_t(getCpuFrequencyMhz());
-    p.tempDeciC = temperatureOn || tempSnapshotMs ? chipTemp : wlink::kTempUnknown;
+    p.tempDeciC = chipTemp;
     p.highpassOn = highpassOn.load();
     p.highpassHz = highpassHz.load();
-    p.temperatureOn = temperatureOn;
+    p.tempFresh = tempSnapshotMs ? 1 : 0;
     p.micLevel = micLevel;
     if (builtIn) {  // digital gain, 0..+30 dB
         p.hasLevel = 1;
@@ -734,11 +734,10 @@ static void runButton() {
 static String settingsText() {
     static const char* const kSet[] = {"auto", "microphone", "speaker"};
     char b[200];
-    snprintf(b, sizeof(b), "mic %u | channel %u | %u MHz | high-pass %s | distance %s (%s) | mode %s | temperature %s",
+    snprintf(b, sizeof(b), "mic %u | channel %u | %u MHz | high-pass %s | distance %s (%s) | mode %s",
              board::micNumber(pairId), channel, unsigned(getCpuFrequencyMhz()),
              highpassOn.load() ? (String(highpassHz.load()) + " Hz").c_str() : "off", wlink::distanceName(distance),
-             wlink::distanceRateText(distance), builtIn ? "microphone (built-in mic)" : kSet[modeSetting],
-             temperatureOn ? "on" : "off");
+             wlink::distanceRateText(distance), builtIn ? "microphone (built-in mic)" : kSet[modeSetting]);
     return b;
 }
 
@@ -794,11 +793,6 @@ static void handleConfig() {
             if (lvl == wlink::kLevelDefault) logf("mic level: default (the adapter's own; it keeps the last level until unplugged)");
             else logf("mic level: %u %% of the adapter's range (from the local board)", unsigned(lvl));
         }
-    }
-    if ((c.temperatureOn != 0) != temperatureOn) {
-        temperatureOn = c.temperatureOn != 0;
-        settings.put("tmp", temperatureOn ? 1 : 0);
-        logf("temperature reading: %s (from the local board)", temperatureOn ? "on, every 10 min with the radio paused" : "off");
     }
     const uint8_t dist = c.distance <= wlink::kDistanceFar ? c.distance : wlink::kDistanceNormal;
     if (dist != distance) {
@@ -863,7 +857,7 @@ static void handleConfig() {
     a.cpuMhz = uint8_t(getCpuFrequencyMhz());
     a.highpassOn = highpassOn.load();
     a.highpassHz = highpassHz.load();
-    a.temperatureOn = temperatureOn;
+    a.reserved1 = 0;
     a.micLevel = micLevel;
     a.distance = distance;
     a.modeSetting = modeSetting;
@@ -981,7 +975,6 @@ void setup() {
     savedFilter = settings.get("opt", wlink::kFilterOn) <= wlink::kFilterOff ? settings.get("opt", 0) : wlink::kFilterOn;
     highpassOn = settings.get("hp", 1) != 0;
     highpassHz = hpf::hzValid(settings.get16("hpz", hpf::kDefaultHz)) ? settings.get16("hpz", hpf::kDefaultHz) : hpf::kDefaultHz;
-    temperatureOn = settings.get("tmp", 1) == 1;  // default on (one paused read every 10 min)
     micLevel = wlink::levelValid(settings.get("lvl", wlink::kLevelDefault)) ? settings.get("lvl", wlink::kLevelDefault)
                                                                             : wlink::kLevelDefault;
     distance = settings.get("dist", wlink::kDistanceNormal);
@@ -996,6 +989,7 @@ void setup() {
     logQueue = xQueueCreate(24, sizeof(LogText));
     idfVprintf = esp_log_set_vprintf(forwardIdfLog);
 
+    chipTemp = board::readChipTempOnce();  // before the radio starts: no pause needed
     const bool radioOk = board::startRadio(channel, onRecv, onSent);
     txPowerDbm = settings.get("txp", wlink::kMaxTxPowerDbm);
     if (txPowerDbm < wlink::kMinTxPowerDbm || txPowerDbm > wlink::kMaxTxPowerDbm) txPowerDbm = wlink::kMaxTxPowerDbm;
@@ -1006,6 +1000,7 @@ void setup() {
     logf("Wireless USB Audio Extender remote %s | %s | MAC %s", kFirmware, board::kindName(), board::macText(mac).c_str());
     logf("settings: %s", settingsText().c_str());
     if (locked) logf("locked to local %s (config.txt remote = MAC; BOOT 10 s unlocks)", board::macText(lockMac).c_str());
+    logf("chip temperature at start: %s", board::tempText(chipTemp).c_str());
     if (!radioOk) logf("ERROR: ESP-NOW v2 start failed (needs Arduino-ESP32 core 3.2 or newer)");
     if (dropNote.magic == kNoteNoLink) {
         drop = dropNote;
@@ -1053,7 +1048,11 @@ void setup() {
 // Temperature read with the radio paused, so the radio and our code never use the sensor
 // at the same moment; starting the radio again also re-runs its own calibration. ESP-NOW
 // is shut down first and started again afterwards (ESP-IDF's recommended order), with the
-// broadcast peer and, if linked, the local board restored. Costs about 0.1-0.3 s of audio.
+// broadcast peer and, if linked, the local board restored.
+//
+// 1.4.4: used only when the local board's drive opens (the audio has stopped by then); a
+// hang here costs a remote restart, not audio. Periodic reads while streaming are gone:
+// 1.4.3 still hung the AtomS3U at a read with an empty queue.
 //
 // 1.4.3: the pause is only made from a quiet radio. Before, it stopped Wi-Fi while the
 // audio task could still be inside esp_now_send() and with up to 36 packets waiting in a
@@ -1061,7 +1060,7 @@ void setup() {
 // there past its 5 s watchdog (AtomS3U watchdog restarts at 0:28 and 10:28 of uptime,
 // the times of its temperature reads; none with temperature = off). Now: new audio sends stop,
 // any send under way finishes, the queue drains (up to kDrainMs), and only then is the
-// radio stopped. If the queue does not drain, the read is skipped and tried again later.
+// radio stopped. If the queue does not drain, the read is skipped.
 constexpr uint32_t kDrainMs = 400;
 static bool quietRadio() {
     radioPaused = true;  // the audio task skips its sends from now on
@@ -1141,7 +1140,7 @@ static void reportDrop(const char* when) {
 
 void loop() {
     const uint32_t now = millis();
-    static uint32_t lastBeacon = 0, lastStatus = 0, unlinkedSince = 0, nextTempRead = 30000;
+    static uint32_t lastBeacon = 0, lastStatus = 0, unlinkedSince = 0;
     static bool everLinked = false, searching = false;
     static uint32_t beaconFailRun = 0;  // beacons in a row the radio refused to send
     static uint32_t linkedSinceMs = 0;
@@ -1262,40 +1261,19 @@ void loop() {
     sendNoise();
     decideMode();
     reportRejected();
-    // Temperature: one short read 30 s after start or after switching on (not while the
-    // radio calibrates at start-up), then every 10 minutes.
-    // A busy radio postpones a read by kTempRetryMs (the pause is skipped, never forced).
-    constexpr uint32_t kTempRetryMs = 60000;
-    static uint32_t tempSkips = 0;
+    // Temperature (1.4.4): only when the local board's drive opens; the audio has stopped.
     if (tempRequested.exchange(false) && (!tempSnapshotMs || now - tempSnapshotMs > 5000)) {
-        // The local board's drive is opening: one reading now, whatever `temperature` says.
         int16_t t;
         if (readTempRadioPaused(&t)) {
             chipTemp = t;
             tempSnapshotMs = millis() ? millis() : 1;
-            logf("chip temperature %s (asked for by the local board)", board::tempText(t).c_str());
+            logf("chip temperature %s (the local board's drive is opening)", board::tempText(t).c_str());
             lastStatus = 0;  // report it right away
         } else {
-            logf("chip temperature not read: the radio was too busy to pause (asked for by the local board)");
+            logf("chip temperature not read: the radio was too busy to pause (drive opening)");
         }
     }
     if (tempSnapshotMs && now - tempSnapshotMs > wlink::kTempSnapshotKeepMs) tempSnapshotMs = 0;
-    if (!temperatureOn) {
-        if (!tempSnapshotMs) chipTemp = wlink::kTempUnknown;
-        nextTempRead = now + 30000;
-    } else if (int32_t(now - nextTempRead) >= 0) {
-        int16_t t;
-        if (readTempRadioPaused(&t)) {
-            chipTemp = t;
-            nextTempRead = now + board::kTempReadMs;
-            if (tempSkips) logf("temperature read done after %lu busy-radio postponements", (unsigned long)tempSkips);
-            tempSkips = 0;
-        } else {
-            if (!tempSkips) logf("temperature read postponed: the radio was too busy to pause (queue did not drain)");
-            tempSkips++;
-            nextTempRead = now + kTempRetryMs;
-        }
-    }
     forwardLogs();
     updateLed();
     delay(2);

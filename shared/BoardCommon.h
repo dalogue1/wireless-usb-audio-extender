@@ -253,11 +253,11 @@ inline const char* resetReasonText() {
     }
 }
 
-// Chip (die) temperature in 0.1 C, or wlink::kTempUnknown. Used only with
-// `temperature = on` (config.txt; default off), once every 10 minutes: the sensor is
-// installed, read once and released again within a few milliseconds, because the
-// Wi-Fi PHY uses the same sensor for its own calibration and link losses were seen
-// while our code held it permanently (remote chip >= 75 C). The 20..100 C range
+// Chip (die) temperature in 0.1 C, or wlink::kTempUnknown. 1.4.4: read only at start
+// (before the radio starts) and when the local board's drive opens (the audio stops then
+// anyway), never while audio streams: the Wi-Fi PHY uses the same sensor for its own
+// calibration, and the radio had to be stopped for each read; restarting it sometimes
+// hung the AtomS3U remote. The sensor is installed, read once and released again. The 20..100 C range
 // (Arduino's temperatureRead() uses 10..50 C, inaccurate when it matters).
 inline int16_t readChipTempOnce() {
     temperature_sensor_handle_t sensor = nullptr;
@@ -272,7 +272,6 @@ inline int16_t readChipTempOnce() {
     temperature_sensor_uninstall(sensor);
     return ok ? int16_t(lroundf(t * 10.0f)) : wlink::kTempUnknown;
 }
-constexpr uint32_t kTempReadMs = 600000;  // every 10 minutes
 
 
 // "45.2 C" or "unknown".

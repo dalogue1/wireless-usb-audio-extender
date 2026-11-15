@@ -24,7 +24,6 @@ tx_power = max       # max, or 2-20 (dBm): radio transmit power of both boards
 cpu_mhz = 240        # 240 or 160: processor speed of both boards (160 runs a little cooler)
 highpass = on        # on, off: remove rumble, wind and hum below highpass_hz (remote)
 highpass_hz = 200    # 50-1000: high-pass cut-off in Hz
-temperature = on     # on, off: log both chips' temperature every 10 min (off: read once when the drive opens)
 mic_level = 100      # 0-100: the adapter's microphone level, % of its range; adapter = leave it (AtomS3U: gain)
 distance = normal    # near, normal or far: radio rate of the link (both boards)
 mode = auto          # auto, microphone or speaker: which way the audio goes
@@ -38,23 +37,21 @@ remote = any         # any, or the remote's MAC address: lock the pair to each o
 | `noise_filter`, `noise_adapt`, `highpass`, `highpass_hz` | [Noise and high-pass filters](noise-filter.md) |
 | `distance`, `tx_power` | [Distance and range](distance.md) |
 | `mode` | [Speaker mode](speaker-mode.md) |
-| `cpu_mhz`, `temperature`, `mic_level` | below |
+| `cpu_mhz`, `mic_level` | below |
 
 **How changes reach the remote.**
 
-* **Most settings** (filters, adapt speed, transmit power, processor speed, temperature, mic level, distance, remote): the remote applies them at once and saves them, so it keeps them while the local board is off.
+* **Most settings** (filters, adapt speed, transmit power, processor speed, mic level, distance, remote): the remote applies them at once and saves them, so it keeps them while the local board is off.
 * **Mic number and channel**: a *handover*. Both boards move together, and the local board never moves without the remote. See [Pairing](pairing.md#changing-the-mic-number-or-channel).
 * **Mode**: the remote saves it and restarts. If the audio direction changes, the local board restarts too, and the computer sees the new device. An [AtomS3U](atoms3u.md) remote is always a microphone.
 
 A line the local board can't understand keeps the previous value; the log and `status.txt` name the line. **Delete `config.txt`** to return to the defaults (it is recreated with every setting explained).
 
-### Processor speed and temperature
+### Processor speed and chip temperature
 
 `cpu_mhz = 160` (default 240) runs both boards a little cooler; it changes on both at once, without a restart. Lower speeds aren't offered: the radio, USB host and noise filter need the headroom.
 
-With `temperature = on` each board reads its chip temperature once every 10 minutes. The local board logs both, shows the latest and the maximum in `status.txt`, and adds a warning event when either chip reaches 75 °C (again after it has cooled below 70 °C). It is the chip's own temperature, some 10–20 °C above the air. Each reading pauses the radio for about 0.1–0.3 s (the radio uses the same sensor for its own calibration), so that much audio is missing every 10 minutes; the link itself survives. The remote only pauses once its radio queue is empty; if the link is so busy that it doesn't empty, the reading waits a minute and tries again (the log says so).
-
-With `temperature = off` there are no readings while the audio runs. When you open the EXTENDER drive, both boards still read their chip temperature **once** (the audio stops then anyway), and `status.txt` shows it as *read once as the drive opened*. So you always get some idea of how warm the boards run, at no cost to the recording.
+Each board reads its chip temperature **at its start** (before its radio starts) and **when you open the EXTENDER drive** (the audio stops then anyway); `status.txt` shows both boards' reading from the drive opening, and the start readings are in `events.txt`. A warning event marks either chip at 75 °C or more. It is the chip's own temperature, some 10–20 °C above the air. There are no readings while the audio runs: the radio uses the same sensor for its own calibration and has to be stopped for each reading, which costs audio and could make an AtomS3U remote restart. (Up to 1.4.3, `temperature = on` read both every 10 minutes; an old `temperature` line in `config.txt` is now ignored.)
 
 ### Mic level
 

@@ -50,7 +50,7 @@
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.3-dev";
+static const char* kFirmware = "1.4.4-dev";
 
 // Time since start from the 64-bit microsecond timer: unlike millis() it does not wrap
 // after 49.7 days, so times in the logs, events.txt and status.txt stay right.
@@ -899,11 +899,9 @@ static void readConfig(uint8_t curPair, uint8_t curChannel) {
     char hp[16];
     if (config.highpass) snprintf(hp, sizeof(hp), "%u Hz", unsigned(config.highpassHz));
     else strcpy(hp, "off");
-    logEvent("config.txt: mic %u, channel %u, feedback %s, noise filter %s, adapt %s, high-pass %s, tx power %s, cpu %u MHz, "
-         "temperature %s%s%s",
+    logEvent("config.txt: mic %u, channel %u, feedback %s, noise filter %s, adapt %s, high-pass %s, tx power %s, cpu %u MHz%s%s",
          config.mic, config.channel, cfg::feedbackName(config.feedback), cfg::filterName(config.filter),
          cfg::adaptName(config.adapt), hp, cfg::txPowerText(config.txPower), unsigned(config.cpuMhz),
-         config.temperature ? "on" : "off",
          r.errors ? " | " : "", configProblem);
     logf("config.txt: distance %s, mode %s, remote %s", cfg::distanceName(config.distance), cfg::modeName(config.mode),
          cfg::remoteText(config));
@@ -913,9 +911,9 @@ static void readConfig(uint8_t curPair, uint8_t curChannel) {
 }
 
 // ---------------------------------------------------------------- temperatures
-// Both chips' temperatures: the latest, the maximum since the local board started,
-// a log line 1 minute after start and then every 10 minutes, and an event when
-// either reaches 75 C (again only after it has cooled below 70 C).
+// Both chips' temperatures (1.4.4): read at each board's start, before its radio starts,
+// and when the drive opens - never while audio streams (each read stops the radio, and
+// restarting it could hang the AtomS3U remote). An event when either reaches 75 C.
 struct TempTrack {
     int16_t now = wlink::kTempUnknown, max = wlink::kTempUnknown;
     uint32_t maxS = 0;  // seconds since start
@@ -955,37 +953,18 @@ static int16_t readTempRadioPaused() {
     return t;
 }
 
-static void reportTemperatures() {
-    if (!config.temperature) return;
-    static uint32_t nextRead = 60000;
-    static int16_t lastRemote = wlink::kTempUnknown;
-    const uint32_t now = millis();
-    // The remote reads its own sensor every 10 min and sends the value with its status.
-    int16_t remote = wlink::kTempUnknown;
+// The remote sends its reading (from its start, or fresh at drive opening) with its status;
+// a new value goes through remoteTemp (75 C warning).
+static void trackRemoteTemp() {
+    static int16_t last = wlink::kTempUnknown;
+    int16_t t = wlink::kTempUnknown;
     if (linked && haveStatus) {
         portENTER_CRITICAL(&linkMux);
-        remote = remoteStatus.tempDeciC;
+        t = remoteStatus.tempDeciC;
         portEXIT_CRITICAL(&linkMux);
     }
-    if (remote != wlink::kTempUnknown && remote != lastRemote) remoteTemp.add(remote, upS(), "remote");
-    lastRemote = remote;
-    // Our own: one short read 1 minute after start, then every 10 minutes, with the log line.
-    if (int32_t(now - nextRead) >= 0) {
-        nextRead = now + board::kTempReadMs;
-        localTemp.add(readTempRadioPaused(), upS(), "local");
-        logf("temperature: remote %s, local %s (max since start: remote %s, local %s)",
-             board::tempText(remote).c_str(), board::tempText(localTemp.now).c_str(),
-             board::tempText(remoteTemp.max).c_str(), board::tempText(localTemp.max).c_str());
-    }
-}
-
-static String maxText(const TempTrack& t) {
-    if (t.max == wlink::kTempUnknown) return "unknown";
-    const uint32_t s = t.maxS;
-    char b[48];
-    snprintf(b, sizeof(b), "%s at %lu:%02lu:%02lu", board::tempText(t.max).c_str(), (unsigned long)(s / 3600),
-             (unsigned long)(s / 60 % 60), (unsigned long)(s % 60));
-    return b;
+    if (t != wlink::kTempUnknown && t != last) remoteTemp.add(t, upS(), "remote");
+    last = t;
 }
 
 // Health snapshot into the event log (three records): signal, both temperatures, both
@@ -1023,8 +1002,9 @@ static void healthSnapshot(bool forEvent) {
     const uint8_t flags = (linked ? evlog::kHfLinked : 0) | (remoteOk ? evlog::kHfRemote : 0) |
                           (pcUsing() ? evlog::kHfRecording : 0) | (forEvent ? evlog::kHfEvent : 0);
     const board::MemInfo m = board::memInfo();
-    const int16_t remoteT = remoteOk && st.temperatureOn ? st.tempDeciC : evlog::kTempNone;
-    const int16_t localT = config.temperature ? localTemp.now : evlog::kTempNone;
+    // 1.4.4: no temperatures while audio streams (start and drive-opening readings are events/status).
+    const int16_t remoteT = evlog::kTempNone;
+    const int16_t localT = evlog::kTempNone;
     eventLog.add(evlog::kHealthRadio, nowS, uint8_t(int8_t(rssi)), uint16_t(uint8_t(st.rssi)) | uint16_t(flags) << 8,
                  cap16(st.radioQueued) << 16 | cap16(dFailed));
     eventLog.add(evlog::kHealthTemp, nowS, cap8(js.lateBlocks - prev.lateBlocks), uint16_t(remoteT),
@@ -1130,11 +1110,8 @@ static void renderStatus(evlog::Out& f) {
     f.printf("  started by: %s\r\n", board::resetReasonText());
     if (eventLog.ok()) f.printf("  event log: start %u, %lu events this start (events.txt)\r\n", eventLog.start(), (unsigned long)eventLog.written());
     else f.printf("  event log: none - flash the full image once to create its flash area\r\n");
-    if (config.temperature)
-        f.printf("  processor %u MHz, chip temperature %s (max %s)\r\n", unsigned(getCpuFrequencyMhz()),
-                 board::tempText(localTemp.now).c_str(), maxText(localTemp).c_str());
-    else if (localTemp.now != wlink::kTempUnknown)
-        f.printf("  processor %u MHz, chip temperature %s (read once as the drive opened)\r\n",
+    if (localTemp.now != wlink::kTempUnknown)
+        f.printf("  processor %u MHz, chip temperature %s (read as the drive opened)\r\n",
                  unsigned(getCpuFrequencyMhz()), board::tempText(localTemp.now).c_str());
     else
         f.printf("  processor %u MHz\r\n", unsigned(getCpuFrequencyMhz()));
@@ -1167,12 +1144,12 @@ static void renderStatus(evlog::Out& f) {
             f.printf("  WARNING: other local boards tried to link to it: %lu hellos refused, last from %s%s\r\n",
                      (unsigned long)s.rejected, board::macText(s.rejectedMac).c_str(),
                      wlink::macIsZero(s.lockedTo) ? "" : " (it is locked)");
-        if (s.temperatureOn)
-            f.printf("  processor %u MHz, chip temperature %s (max %s)\r\n", unsigned(s.cpuMhz),
-                     board::tempText(s.tempDeciC).c_str(), maxText(remoteTemp).c_str());
-        else if (s.tempDeciC != wlink::kTempUnknown)
-            f.printf("  processor %u MHz, chip temperature %s (read once as the drive opened)\r\n", unsigned(s.cpuMhz),
+        if (s.tempDeciC != wlink::kTempUnknown && s.tempFresh)
+            f.printf("  processor %u MHz, chip temperature %s (read as the drive opened)\r\n", unsigned(s.cpuMhz),
                      board::tempText(s.tempDeciC).c_str());
+        else if (s.tempDeciC != wlink::kTempUnknown)
+            f.printf("  processor %u MHz, chip temperature %s (read at the remote's start; no reading as the drive opened)\r\n",
+                     unsigned(s.cpuMhz), board::tempText(s.tempDeciC).c_str());
         else
             f.printf("  processor %u MHz, chip temperature not read (the remote did not answer in time)\r\n",
                      unsigned(s.cpuMhz));
@@ -1348,7 +1325,7 @@ static void writeDriveFiles(bool haveGraph) {
     const uint32_t t0 = millis();
     flushRemotePending();
     // A fresh local temperature for status.txt (the radio pause no longer matters: the board
-    // restarts next). 1.4.3: also with temperature = off - one reading is better than none.
+    // restarts next).
     localTemp.add(readTempRadioPaused(), upS(), "local");
     auto statusText = [](WriteFn w, void* c) { evlog::Out o{w, c}; renderStatus(o); };
     if (!writeDriveFile("/status.txt", statusText)) writeNotWritten("/status.txt", "status.txt");
@@ -1430,11 +1407,11 @@ static void serviceDriveOpening() {
         wlink::fill(h, wlink::kNoiseRequest, pairId);
         esp_now_send(remoteMac, (const uint8_t*)&h, sizeof(h));
     }
-    // 1.4.3: with temperature = off the remote reads its chip temperature once, on request;
+    // The remote reads its chip temperature once, on request (1.4.3; the only read after its start since 1.4.4);
     // its next status carries it. Asked once a second; at most 4 s spent waiting for it.
     static uint32_t lastTempAsk = 0, firstTempAsk = 0;
-    const bool wantTemp = fresh && !s.temperatureOn;
-    const bool haveTemp = s.tempDeciC != wlink::kTempUnknown;
+    const bool wantTemp = fresh;
+    const bool haveTemp = s.tempFresh && s.tempDeciC != wlink::kTempUnknown;
     if (wantTemp && !haveTemp && now - lastTempAsk > 1000) {
         lastTempAsk = now;
         if (!firstTempAsk) firstTempAsk = now;
@@ -1563,7 +1540,7 @@ static void syncRemote() {
                remoteStatus.adapt != config.adapt || remoteStatus.txPowerDbm != config.txPower ||
                remoteStatus.cpuMhz != config.cpuMhz || remoteStatus.highpassOn != config.highpass ||
                remoteStatus.highpassHz != config.highpassHz ||
-               remoteStatus.temperatureOn != config.temperature || remoteStatus.micLevel != config.micLevel ||
+               remoteStatus.micLevel != config.micLevel ||
                remoteStatus.distance != config.distance || remoteStatus.modeSetting != config.mode ||
                lockedHere != config.lock;
     }
@@ -1581,7 +1558,7 @@ static void syncRemote() {
     c.cpuMhz = config.cpuMhz;
     c.highpassOn = config.highpass;
     c.highpassHz = config.highpassHz;
-    c.temperatureOn = config.temperature;
+    c.reserved1 = 0;
     c.micLevel = config.micLevel;
     c.distance = config.distance;
     c.modeSetting = config.mode;
@@ -1664,7 +1641,7 @@ void setup() {
     }
     USB.productName(name);
     USB.manufacturerName("Wireless USB Audio Extender");
-    USB.firmwareVersion(0x0142);
+    USB.firmwareVersion(0x0144);
     USB.onEvent(onUsbEvent);
     LogPort.setTxTimeoutMs(20);  // never stall when no terminal is open
     LogPort.onEvent(onSerialEvent);
@@ -1685,6 +1662,7 @@ void setup() {
     adapterRecLen = uint16_t(settings.getBytes("adapter", adapterRec, sizeof(adapterRec)));
     if (!adinfo::recordSize(adapterRec, adapterRecLen)) adapterRecLen = 0;  // none, or an older format
 
+    localTemp.add(board::readChipTempOnce(), upS(), "local");  // before the radio starts: no pause
     const bool radioOk = board::startRadio(channel, onRecv, nullptr);
     board::setTxPower(config.txPower);
     esp_wifi_get_mac(WIFI_IF_STA, myMac);
@@ -1692,6 +1670,7 @@ void setup() {
     logf("local settings: %s %u | channel %u | %u MHz | distance %s (%s) | remote %s", speakerMode() ? "speaker" : "mic",
          board::micNumber(pairId), channel, unsigned(getCpuFrequencyMhz()), wlink::distanceName(config.distance),
          wlink::distanceRateText(config.distance), cfg::remoteText(config));
+    logEvent("local chip temperature at start: %s", board::tempText(localTemp.now).c_str());
     if (!radioOk) logf("ERROR: ESP-NOW v2 start failed (needs Arduino-ESP32 core 3.2 or newer)");
     logf("started by: %s", board::resetReasonText());
     if (eventLog.ok()) logf("event log: start %u (events.txt on the EXTENDER drive)", eventLog.start());
@@ -1845,7 +1824,7 @@ void loop() {
     reportPairing();
     serviceDriveOpening();
     reportStats();
-    reportTemperatures();
+    trackRemoteTemp();
     reportHourly();
     reportMemory();
     updateLed();

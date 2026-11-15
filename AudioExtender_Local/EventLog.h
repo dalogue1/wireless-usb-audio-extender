@@ -457,7 +457,10 @@ private:
             char rt[16], lt[16];
             tempText(int16_t(h[1].a16), rt, sizeof(rt));
             tempText(int16_t(h[1].a32 >> 16), lt, sizeof(lt));
-            if (remote) add(" | temp remote %s, local %s", rt, lt);
+            // 1.4.4 records carry no temperatures (kTempNone): then the part is left out.
+            const bool noTemps = int16_t(h[1].a16) == kTempNone && int16_t(h[1].a32 >> 16) == kTempNone;
+            if (noTemps) {
+            } else if (remote) add(" | temp remote %s, local %s", rt, lt);
             else add(" | temp local %s", lt);
             add(" | audio lost %s, late %s", count16(h[1].a32 & 0xFFFF).s, n.late.s);
         }

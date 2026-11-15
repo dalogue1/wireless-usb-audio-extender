@@ -19,7 +19,7 @@
 namespace wlink {
 
 constexpr uint32_t kMagic = 0x314D5557;  // "WUM1" little-endian
-constexpr uint8_t kVersion = 16; // 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
+constexpr uint8_t kVersion = 17; // 1.4.4: temperature only at start and drive opening (no 10-min reads); v16 = 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
                                   // temperature + cpu_mhz; v6 = 1.2.4: tx_power; v5 = 1.2.3: mic 1..9;
                                   // v4 = 1.2.2: silent-mic status; v3 = 1.2.0: config.txt
 
@@ -61,7 +61,7 @@ enum Type : uint8_t {
     kNoiseData = 12,    // remote -> local: the signature, in 0.1 dB per bin
     kStereoAudio = 13,  // local -> remote (speaker mode): 12 ms of the PC's stereo audio, IMA ADPCM
     kTempRequest = 14,  // local -> remote: read the chip temperature once now (drive opening);
-                        // the remote's next status carries it even with temperature = off
+                        // the remote's next status carries it with tempFresh = 1
 };
 constexpr uint32_t kTempSnapshotKeepMs = 30000;  // remote: a snapshot is reported this long
 
@@ -178,10 +178,10 @@ struct __attribute__((packed)) StatusPacket {
     uint8_t noSignal;       // 1: the adapter streams, but only silence for 20 s (mic not connected?)
     uint8_t txPowerDbm;     // radio transmit power in effect
     uint8_t cpuMhz;         // processor speed in effect
-    int16_t tempDeciC;      // chip (die) temperature in 0.1 C, or kTempUnknown (also a snapshot: kTempRequest)
+    int16_t tempDeciC;      // chip (die) temperature in 0.1 C, or kTempUnknown: read at start, or on kTempRequest
     uint8_t highpassOn;     // high-pass filter in effect
     uint16_t highpassHz;    // its cut-off
-    uint8_t temperatureOn;  // 1: reading its chip temperature (tempDeciC valid)
+    uint8_t tempFresh;      // 1: tempDeciC was read on kTempRequest (drive opening); 0: at the remote's start
     uint8_t micLevel;       // mic_level setting: 0..100 %, or kLevelDefault
     uint8_t hasLevel;       // the adapter has a level control (the values below are valid)
     int16_t levelMin, levelMax, levelNow;  // its range and current level, 1/256 dB
@@ -220,7 +220,7 @@ struct __attribute__((packed)) ConfigPacket {
     uint8_t cpuMhz;       // processor speed, 240 or 160
     uint8_t highpassOn;   // high-pass filter on/off
     uint16_t highpassHz;  // its cut-off, 50..1000 Hz
-    uint8_t temperatureOn;  // read the chip temperature
+    uint8_t reserved1;      // was temperatureOn (up to 1.4.3); 0
     uint8_t micLevel;       // the adapter's level: 0..100 % of its range, or kLevelDefault
     uint8_t distance;       // Distance: radio rate of the paired link
     uint8_t modeSetting;    // ModeSetting
@@ -237,7 +237,7 @@ struct __attribute__((packed)) ConfigAckPacket {
     uint8_t cpuMhz;               // in effect now
     uint8_t highpassOn;           // in effect now
     uint16_t highpassHz;          // in effect now
-    uint8_t temperatureOn;        // in effect now
+    uint8_t reserved1;            // was temperatureOn (up to 1.4.3); 0
     uint8_t micLevel;             // in effect now
     uint8_t distance;             // in effect now
     uint8_t modeSetting;          // saved (a change restarts the remote)

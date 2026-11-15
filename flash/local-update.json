@@ -1,6 +1,6 @@
 {
   "name": "Wireless USB Audio Extender - local board (at the PC)",
-  "version": "1.4.3-dev",
+  "version": "1.4.4-dev",
   "new_install_prompt_erase": false,
   "new_install_improv_wait_time": 0,
   "builds": [
@@ -8,7 +8,7 @@
       "chipFamily": "ESP32-S3",
       "parts": [
         {
-          "path": "../firmware/wireless-usb-audio-extender-local-1.4.3-dev-update.bin",
+          "path": "../firmware/wireless-usb-audio-extender-local-1.4.4-dev-update.bin",
           "offset": 65536
         }
       ]

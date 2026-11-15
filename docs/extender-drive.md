@@ -35,7 +35,7 @@ It is a snapshot taken when the drive opened; it doesn't refresh.
 
 ## status.txt
 
-What is in effect when the drive opens: both boards' firmware and MAC addresses, the mode, mic number, channel, distance and pairing, the filters, the adapter and its level, processor speed, both chips' temperature (with `temperature = off`, read once as the drive opens), the USB connection counts, any voice files that couldn't be used (by name, with why), and warnings such as a second remote on the same mic number.
+What is in effect when the drive opens: both boards' firmware and MAC addresses, the mode, mic number, channel, distance and pairing, the filters, the adapter and its level, processor speed, both chips' temperature (read as the drive opens), the USB connection counts, any voice files that couldn't be used (by name, with why), and warnings such as a second remote on the same mic number.
 
 ## events.txt
 
@@ -53,7 +53,7 @@ start 7
 
 * The board has no clock: events are grouped under the start they belong to (`start 7`, counted since the log began), each with the time since that start.
 * **Logged:** every start and why (power on, watchdog, crash, firmware restart), opening the drive, factory resets, USB set-up, release, suspend, resume, stalls and re-attaches, link lost and back, radio restarts, remote restarts with the remote's own reasons, errors and warnings, adapters plugged, removed or refused, no microphone signal, high temperatures, handovers, mode changes, locking, a second extender on the same mic number, and `config.txt` problems.
-* **Health snapshots** give the conditions around those events: one every hour, and one just before a link loss, a remote restart, a USB stall or a radio restart. Signal strength both ways, failed sends, both chips' temperatures, audio lost or late and buffer underruns since the previous snapshot (a `+` means at least that many: `65535+`, or `4095+` for late audio; snapshots from before 1.4.3 stop at `255+`), and free memory. Hourly ones are marked `(hourly)`, so slow trends show.
+* **Health snapshots** give the conditions around those events: one every hour, and one just before a link loss, a remote restart, a USB stall or a radio restart. Signal strength both ways, failed sends, audio lost or late and buffer underruns since the previous snapshot (a `+` means at least that many: `65535+`, or `4095+` for late audio; snapshots from before 1.4.3 stop at `255+`), and free memory. Hourly ones are marked `(hourly)`, so slow trends show.
 * A real one: [events.txt](examples/events.txt) (from 1.3.6, which still wrote the start number on every line).
 * The flash area holds about 3,800 events (weeks to months), the oldest giving way first. A power cut loses at most the event being written. The log survives a factory reset; flashing with **Install** (rather than Update) clears it.
 

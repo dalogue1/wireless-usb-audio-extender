@@ -13,7 +13,6 @@ tx_power = max          # max, or 2-20 (dBm): radio transmit power of both board
 cpu_mhz = 240           # 240 or 160: processor speed of both boards (160 runs a little cooler)
 highpass = on           # on, off: remove rumble, wind and hum below highpass_hz (remote)
 highpass_hz = 200        # 50-1000: high-pass cut-off in Hz (200 keeps low owl and dove calls)
-temperature = on         # on, off: log both chips' temperature every 10 min (radio paused ~0.2 s)
 mic_level = default     # default, or 0-100: the adapter's microphone level, % of its range
                        # (default leaves the adapter's own level; status.txt shows it in dB;
                        # in speaker mode it sets the adapter's speaker level)

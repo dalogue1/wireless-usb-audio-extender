@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
             const std::string t5 = render(log, 101000);
             if (verbose) { fputs(t5.c_str(), stdout); fflush(stdout); }
             assert(count(t5, "1d 04:00:00  health (hourly): linked, RSSI -61 dBm (remote hears -56), remote queue 1, sends failed 0"
-                             " | temp remote ?, local ? | audio lost 2049, late 300, underruns 1000"
+                             " | audio lost 2049, late 300, underruns 1000"
                              " | mem remote 157 KB (largest 115), local 64 KB | PC using the audio\r\n") == 1);
             assert(count(t5, "late 4095+, underruns 65535+ | mem remote 1023 KB (largest 255), local 1023 KB") == 1);
             // the 1.4.2 record (kHealthMem) still reads as before

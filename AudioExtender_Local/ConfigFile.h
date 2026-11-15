@@ -11,7 +11,8 @@
 //   cpu_mhz = 240        240 or 160                      (both boards)
 //   highpass = on        on, off                          (remote)
 //   highpass_hz = 200    50..1000 (Hz)                    (remote)
-//   temperature = on     on, off: log chip temperatures   (both boards)
+//   (temperature = ...   up to 1.4.3; accepted and ignored since 1.4.4: both chips are read
+//                        at start and when the drive opens, never while audio streams)
 //   mic_level = 100      0..100 (% of the adapter's level range; AtomS3U: of 0..+30 dB gain),
 //                        or adapter (leave the adapter's own level); "default" = 100 (remote)
 //   distance = normal    near, normal or far: radio rate of the link (both boards)
@@ -44,7 +45,6 @@ struct Settings {
     uint8_t cpuMhz = 240;   // 240 or 160
     uint8_t highpass = 1;   // 1 on, 0 off
     uint16_t highpassHz = 200;  // 50..1000
-    uint8_t temperature = 1;    // 1: read and log both chips' temperature (every 10 min, radio paused)
     uint8_t micLevel = 100;  // 0..100 %, or kLevelDefault (leave the adapter's own level)
     uint8_t distance = 0;   // 0 normal, 1 near, 2 far            (wlink::Distance order)
     uint8_t mode = 0;       // 0 auto, 1 microphone, 2 speaker    (wlink::ModeSetting order)
@@ -53,7 +53,7 @@ struct Settings {
     bool operator==(const Settings& o) const {
         return mic == o.mic && channel == o.channel && feedback == o.feedback && filter == o.filter && adapt == o.adapt &&
                txPower == o.txPower && cpuMhz == o.cpuMhz && highpass == o.highpass && highpassHz == o.highpassHz &&
-               temperature == o.temperature && micLevel == o.micLevel && distance == o.distance && mode == o.mode &&
+               micLevel == o.micLevel && distance == o.distance && mode == o.mode &&
                lock == o.lock && memcmp(remoteMac, o.remoteMac, 6) == 0;
     }
 };
@@ -172,7 +172,7 @@ inline Result parse(const char* text, const Settings& base) {
             } else if (strcmp(key, "highpass") == 0) {
                 if ((ok = strcmp(val, "on") == 0 || strcmp(val, "off") == 0)) r.settings.highpass = strcmp(val, "on") == 0;
             } else if (strcmp(key, "temperature") == 0) {
-                if ((ok = strcmp(val, "on") == 0 || strcmp(val, "off") == 0)) r.settings.temperature = strcmp(val, "on") == 0;
+                ok = true;  // 1.4.4: setting removed; an old config.txt line is ignored
             } else if (strcmp(key, "highpass_hz") == 0) {
                 if ((ok = isNum && num >= 50 && num <= 1000)) r.settings.highpassHz = uint16_t(num);
             } else if (strcmp(key, "cpu_mhz") == 0) {
@@ -229,8 +229,6 @@ inline int format(const Settings& s, char* out, size_t cap) {
         "cpu_mhz = %u           # 240 or 160: processor speed of both boards (160 runs a little cooler)\r\n"
         "highpass = %s           # on, off: remove rumble, wind and hum below highpass_hz (remote)\r\n"
         "highpass_hz = %u        # 50-1000: high-pass cut-off in Hz (200 keeps low owl and dove calls)\r\n"
-        "temperature = %s         # on, off: log both chips' temperature every 10 min (radio paused ~0.2 s);\r\n"
-        "                       # either way, both are read once when the drive opens (status.txt)\r\n"
         "mic_level = %s         # 0-100: the adapter's microphone level, %% of its range (default 100);\r\n"
         "                       # adapter = leave the adapter's own level. AtomS3U: the built-in mic's\r\n"
         "                       # gain, 0-100 = 0 to +30 dB. status.txt shows it in dB. In speaker\r\n"
@@ -243,7 +241,7 @@ inline int format(const Settings& s, char* out, size_t cap) {
         "remote = %s            # any, or the remote's MAC (status.txt): link only to that remote, and\r\n"
         "                       # lock it to this local board. Back to any unlocks it again.\r\n",
         s.mic, s.channel, feedbackName(s.feedback), filterName(s.filter), adaptName(s.adapt), txPowerText(s.txPower),
-        unsigned(s.cpuMhz), s.highpass ? "on" : "off", unsigned(s.highpassHz), s.temperature ? "on" : "off", level,
+        unsigned(s.cpuMhz), s.highpass ? "on" : "off", unsigned(s.highpassHz), level,
         distanceName(s.distance), modeName(s.mode), remoteText(s));
 }
 
