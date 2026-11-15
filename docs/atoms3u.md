@@ -6,6 +6,8 @@ The [M5Stack AtomS3U](https://docs.m5stack.com/en/products/sku/K125) is an ESP32
 
 The trade-off is shorter range (a small chip antenna instead of the XIAO's external one) and a noisier built-in mic: its signal-to-noise ratio (SNR) is 61.5 dB, against 80 dB for the AOM5024 used in the main build, and it covers about 100 Hz to 10 kHz. Faint and distant birds, and the highest-pitched songs, are picked up less often. It is the simplest way to start, and good for nearby birds; for the most range and the best sound, use the [main build](../README.md#parts).
 
+In a side-by-side test with BirdNET-Go, both mics outdoors at the same time, the AOM5024's background noise was about 19 dB lower than the AtomS3U's, without the AtomS3U's hiss above 12 kHz. BirdNET still identified faint Blue Jay calls through the AOM5024 (42–82 % confidence) that would have been buried in the AtomS3U's background noise.
+
 **Start simple, upgrade later.** An AtomS3U remote can be replaced at any time by a XIAO ESP32-S3 remote with a USB audio adapter and a better microphone, and an AtomS3U local board by a XIAO local board. The firmware is the same, so with the default settings the new board just takes the old one's place. If you changed `mic` or `channel`, or locked the pair, see [Pairing](pairing.md).
 
 ## Two ways to use it
