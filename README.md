@@ -19,7 +19,7 @@ Made for **bird monitoring with [BirdNET-Go](https://github.com/tphakala/birdnet
 
 One day of BirdNET-Go detections by hour (November, US Central), from a UGREEN adapter and an AOM5024 microphone (signal-to-noise ratio, SNR: 80 dB) through the extender:
 
-![BirdNET-Go daily chart: 12 species, Blue Jay up to 63 detections an hour](docs/images/birdnet-go-day.png)
+![BirdNET-Go daily activity chart: 16 bird species (and a squirrel) in one day, Scaly-breasted Munia up to 49 detections an hour](docs/images/birdnet-go-day.png)
 
 The species are BirdNET's own identifications, not checked by ear.
 
