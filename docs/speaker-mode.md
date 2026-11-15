@@ -46,8 +46,8 @@ The local board starts in its last mode straight away (the first time: microphon
 
 The computer sends the local board full-quality stereo: two channels, 48,000 samples a second each. Sent as it is, that would be twice as much data as the microphone's single channel, and the radio link would have less room left to resend packets when Wi-Fi around it is busy.
 
-So the local board compresses the sound before sending it, with a simple audio codec (IMA ADPCM). Each channel shrinks to a quarter of its size, so both channels together take **half the airtime** of the microphone's mono stream. The remote expands them again and plays left and right through the adapter.
+So the local board compresses the sound before sending it, with a simple audio codec (IMA ADPCM). Each channel shrinks to a quarter of its size, so both channels together take **half the airtime** of one uncompressed mono channel. The remote expands them again and plays left and right through the adapter.
 
 * **Lost packets:** the sound travels in small packets of 12 ms. Each one can be expanded on its own, so a packet lost on the way costs only that 12 ms gap, as in microphone mode, with no click or after-effect on the sound that follows.
 * **Sound quality:** speech and most music sound clean. On very quiet passages and bright, busy sounds (cymbals, for example) you may hear a faint hiss that the original doesn't have.
-* **Microphone mode is not compressed:** the microphone's sound is sent exactly as recorded, so nothing is added to recordings for BirdNET-Go or BirdNET-Pi.
+* **Microphone mode** depends on the [`distance`](distance.md) setting: uncompressed at `near`, 8-bit µ-law at `normal` (the default; its added noise sits far below any outdoor background) and IMA ADPCM at `far`, to save airtime at the slowest radio rate. Speaker mode always uses ADPCM, whatever the `distance`.
