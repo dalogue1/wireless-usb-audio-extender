@@ -9,7 +9,7 @@ Any ready-made microphone with the right plug works with the extender. If you li
 * **Capsule:** [AOM-5024P-HD-MB-R](https://www.digikey.com/en/products/detail/pui-audio-inc/AOM-5024P-HD-MB-R/16585482), the version with pins. It is easier to solder than the solder-pad version, and the pins keep the soldering heat away from the capsule, which can damage it.
 * **Cable:** shielded, with two inner wires, of a reasonable length. 6 ft (1.8 m) of 24 AWG two-conductor shielded security alarm wire is tested; longer may work.
 * **Plug:** 3.5 mm, matching the adapter's jack: **TRRS** for one combined headset jack, **TRS** for a separate pink mic jack ([Microphone plugs](troubleshooting.md#microphone-plugs)).
-* **Foam cover** (optional): a small windscreen over the capsule.
+* **Foam cover** (optional): a small windscreen over the capsule, for example [this one](https://www.amazon.com/dp/B01EJ0N5FS).
 
 ## The simple way
 
