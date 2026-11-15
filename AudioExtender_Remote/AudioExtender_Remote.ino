@@ -49,7 +49,7 @@
 #include "esp_timer.h"
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.4-dev";
+static const char* kFirmware = "1.4.5-dev";
 static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static board::StatusLed led;
@@ -404,13 +404,42 @@ static void sendAudio(wlink::AudioPacket& pkt, const int16_t* pcm, uint32_t& seq
     for (int i = 0; i < wlink::kBlockSamples; ++i) dst[i] = pcm[i];
     if (++packetFill < wlink::kPacketBlocks) return;
     packetFill = 0;
-    wlink::fill(pkt.h, wlink::kAudio, pairId, streamStart.exchange(false) ? wlink::kFlagStreamStart : 0);
-    pkt.seq = seq++;
-    pkt.samples = wlink::kPacketSamples;
+    const uint8_t flags = streamStart.exchange(false) ? wlink::kFlagStreamStart : 0;
+    const void* out = &pkt;
+    size_t outLen = 0;
+    if (distance == wlink::kDistanceFar) {
+        // 1.4.5: at 2 Mbit/s, PCM took about half the channel's air time; ADPCM a quarter of that.
+        static wlink::MonoAdpcmPacket ap;
+        static adpcm::Encoder enc;  // runs continuously; each packet carries its start state
+        static int16_t block[wlink::kPacketSamples];
+        memcpy(block, pkt.pcm, sizeof(block));
+        wlink::fill(ap.h, wlink::kMonoAdpcm, pairId, flags);
+        ap.seq = seq++;
+        ap.frames = wlink::kPacketSamples;
+        ap.predictor = int16_t(enc.d.predictor);
+        ap.index = uint8_t(enc.d.index);
+        enc.encode(block, wlink::kPacketSamples, 1, ap.data);
+        out = &ap;
+        outLen = sizeof(ap);
+    } else if (distance == wlink::kDistanceNormal) {
+        // 1.4.5: 8-bit mu-law, half the air time, no practical loss (see LinkProtocol.h).
+        static wlink::MonoMulawPacket mp;
+        wlink::fill(mp.h, wlink::kMonoMulaw, pairId, flags);
+        mp.seq = seq++;
+        mp.frames = wlink::kPacketSamples;
+        for (int i = 0; i < wlink::kPacketSamples; ++i) mp.data[i] = wlink::mulawEncode(pkt.pcm[i]);
+        out = &mp;
+        outLen = sizeof(mp);
+    } else {  // near: uncompressed
+        wlink::fill(pkt.h, wlink::kAudio, pairId, flags);
+        pkt.seq = seq++;
+        pkt.samples = wlink::kPacketSamples;
+        outLen = wlink::audioPacketBytes(pkt.samples);
+    }
     // The ESP-NOW queue can be momentarily full (e.g. log lines going out
     // right after linking): wait a moment and retry rather than lose 12 ms.
     for (int attempt = 0; attempt < 4; ++attempt) {
-        const esp_err_t err = radioSend(localMac, &pkt, wlink::audioPacketBytes(pkt.samples));
+        const esp_err_t err = radioSend(localMac, out, outLen);
         if (err == ESP_OK) { sent++; errStreak = 0; return; }
         lastSendErr = err;
         if (err != ESP_ERR_ESPNOW_NO_MEM) break;
@@ -1060,13 +1089,16 @@ void setup() {
 // there past its 5 s watchdog (AtomS3U watchdog restarts at 0:28 and 10:28 of uptime,
 // the times of its temperature reads; none with temperature = off). Now: new audio sends stop,
 // any send under way finishes, the queue drains (up to kDrainMs), and only then is the
-// radio stopped. If the queue does not drain, the read is skipped.
+// radio stopped. 1.4.5: after kDrainMs it goes ahead anyway (see quietRadio).
 constexpr uint32_t kDrainMs = 400;
+// 1.4.5: only the audio task's send is waited for without limit (it ends quickly); the
+// queue gets kDrainMs and the pause goes ahead anyway - its count can stay at 1 (a send
+// whose report never came), which made 1.4.4 skip every drive-opening reading.
 static bool quietRadio() {
     radioPaused = true;  // the audio task skips its sends from now on
     const uint32_t t0 = millis();
-    while (audioSending.load() || radioQueued() != 0) {
-        if (millis() - t0 > kDrainMs) {
+    while (audioSending.load() || (radioQueued() != 0 && millis() - t0 <= kDrainMs)) {
+        if (millis() - t0 > 2000) {  // the audio task never finished its send
             radioPaused = false;
             return false;
         }

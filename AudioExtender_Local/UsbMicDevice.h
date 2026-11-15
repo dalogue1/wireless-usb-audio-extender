@@ -6,8 +6,7 @@
 // 47, 48 or 49 samples from the JitterBuffer (see JitterBuffer.h).
 #include <Arduino.h>
 
-template <uint8_t kCh> class JitterBufferT;
-using JitterBuffer = JitterBufferT<1>;  // JitterBuffer.h
+#include "JitterBuffer.h"  // JitterBuffer (1.4.5: its size is a template parameter)
 class VoiceMixer;
 
 namespace usbmicdev {

@@ -492,6 +492,47 @@ static double snrDb(const std::vector<int16_t>& ref, const std::vector<int16_t>&
     }
     return err > 0 ? 10 * std::log10(sig / err) : 200;
 }
+// 1.4.5: microphone audio at distance = far. A bird-like call (2-6 kHz sweeps) over a quiet
+// background, sent as mono ADPCM packets, decoded on their own: how clean is it?
+static void monoAdpcmTests() {
+    constexpr uint32_t N = wlink::kPacketSamples, kPackets = 400;  // 4.8 s
+    std::vector<int16_t> x(N * kPackets);
+    uint32_t rng = 12345;
+    auto noise = [&]() { rng = rng * 1664525u + 1013904223u; return int32_t(rng >> 16) - 32768; };
+    for (uint32_t i = 0; i < x.size(); ++i) {
+        const double t = double(i) / 48000, ph = std::fmod(t, 0.25);
+        const double f = 2000 + 16000 * ph;  // 2 -> 6 kHz sweep every 250 ms
+        double v = 0.02 * noise() / 32768.0 * 32767;  // background about -34 dBFS
+        if (ph < 0.15) v += 6000 * std::sin(2 * M_PI * f * ph);  // call at about -15 dBFS
+        x[i] = int16_t(v);
+    }
+    adpcm::Encoder enc;
+    std::vector<int16_t> out(x.size());
+    for (uint32_t p = 0; p < kPackets; ++p) {
+        wlink::MonoAdpcmPacket k;
+        wlink::fill(k.h, wlink::kMonoAdpcm, 1);
+        k.seq = p; k.frames = N;
+        k.predictor = int16_t(enc.d.predictor);
+        k.index = uint8_t(enc.d.index);
+        enc.encode(&x[N * p], N, 1, k.data);
+        CHECK(wlink::check(reinterpret_cast<const uint8_t*>(&k), sizeof(k), 1) == wlink::kMonoAdpcm, "mono packet checks");
+        adpcm::Decoder d;
+        d.predictor = k.predictor;
+        d.index = k.index;
+        adpcm::decode(d, k.data, N, &out[N * p], 1);
+    }
+    const double snr = snrDb(x, out, 480);
+    printf("  ADPCM mono (far): SNR %.1f dB, %zu B per 12 ms packet (PCM %zu B)\n", snr, sizeof(wlink::MonoAdpcmPacket),
+           wlink::audioPacketBytes(N));
+    CHECK(snr > 20, "mono ADPCM round trip > 20 dB SNR on a bird-like signal");
+    // 1.4.5: mu-law at distance = normal, same signal.
+    std::vector<int16_t> mu(x.size());
+    for (size_t i = 0; i < x.size(); ++i) mu[i] = wlink::mulawDecode(wlink::mulawEncode(x[i]));
+    const double smu = snrDb(x, mu, 0);
+    printf("  mu-law mono (normal): SNR %.1f dB, %zu B per 12 ms packet\n", smu, sizeof(wlink::MonoMulawPacket));
+    CHECK(smu > 33, "mu-law round trip > 33 dB SNR on a bird-like signal");
+}
+
 static void stereoAdpcmTests() {
     constexpr uint32_t N = wlink::kPacketSamples, kPackets = 200;  // 2.4 s
     // Left: 1 kHz at -6 dBFS; right: 300 Hz + 5 kHz at -12 dBFS each (different, to catch a swap).
@@ -577,6 +618,7 @@ static void stereoAdpcmTests() {
 
 int main() {
     stereoAdpcmTests();
+    monoAdpcmTests();
     modeTests();
     svgReportTests();
     usbWatchTests();

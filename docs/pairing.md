@@ -10,7 +10,7 @@ The remote announces itself on its channel five times a second. A local board wi
 
 Set a different `mic` (1–9) in each local board's [`config.txt`](configuration.md): the computer sees **Extender Mic 1**, **Extender Mic 2** … and the EXTENDER drives are named EXTENDER1, EXTENDER2 … A remote and a local board only talk when their numbers match.
 
-* **Give each pair its own channel** (`channel` in `config.txt`): **1, 6 and 11** don't overlap; for a fourth pair use 3 or 9. Each pair uses about 7 %, 14 % or 45 % of a channel (`distance` near, normal, far), before retries. Pairs on one channel take turns on the air, so their shares add up: in testing, three pairs on one channel (one of them at `far`) lost audio all the time and the far pair's remote kept restarting; with that pair on its own channel it lost nothing in an hour.
+* **Give each pair its own channel** (`channel` in `config.txt`): **1, 6 and 11** don't overlap; for a fourth pair use 3 or 9. Each pair uses about 7 %, 10 % or 16 % of a channel (`distance` near, normal, far; before 1.4.5 `normal` took 14 % and `far` 45 %), before retries. Pairs on one channel take turns on the air, so their shares add up: in testing, three pairs on one channel (one of them at the old, uncompressed `far`) lost audio all the time and the far pair's remote kept restarting; with that pair on its own channel it lost nothing in an hour.
 * Pairs far enough apart not to hear each other don't share airtime at all.
 * Linux names the sound card after the mic number (`E1`, `E2` …). After changing `mic`, choose the new **Extender Mic N** in your recording software.
 

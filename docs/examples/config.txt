@@ -16,8 +16,8 @@ highpass_hz = 200        # 50-1000: high-pass cut-off in Hz (200 keeps low owl a
 mic_level = default     # default, or 0-100: the adapter's microphone level, % of its range
                        # (default leaves the adapter's own level; status.txt shows it in dB;
                        # in speaker mode it sets the adapter's speaker level)
-distance = normal       # near, normal or far: far reaches furthest but copes worst with busy
-                       # Wi-Fi; near is the most robust where Wi-Fi is busy (both boards)
+distance = normal       # near, normal or far: radio rate and audio format; far reaches furthest,
+                       # near is uncompressed (see distance.md; both boards)
 mode = auto             # auto, microphone or speaker: which way the audio goes. auto decides
                        # when the remote starts: a mic signal = microphone, silence = speaker
                        # (with a microphone always connected, microphone is the safe choice)

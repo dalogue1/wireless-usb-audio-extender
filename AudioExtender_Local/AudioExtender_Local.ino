@@ -50,7 +50,7 @@
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.4-dev";
+static const char* kFirmware = "1.4.5-dev";
 
 // Time since start from the 64-bit microsecond timer: unlike millis() it does not wrap
 // after 49.7 days, so times in the logs, events.txt and status.txt stay right.
@@ -360,6 +360,20 @@ static void noteOtherRemote(const uint8_t* src) {
     portEXIT_CRITICAL(&linkMux);
 }
 
+// One received microphone packet (PCM, or ADPCM decoded): into the jitter buffer, and its
+// peak for the LED. Called from onRecv (Wi-Fi task).
+static void micBlockIn(uint32_t seq, uint8_t flags, const int16_t* pcm, uint16_t n) {
+    if (flags & wlink::kFlagStreamStart) jitter.streamStart();
+    jitter.pushBlock(seq, pcm, n);
+    uint16_t peak = 0;
+    for (uint16_t i = 0; i < n; ++i) {
+        const int v = pcm[i] < 0 ? -int(pcm[i]) : pcm[i];
+        if (v > peak) peak = uint16_t(v > 32767 ? 32767 : v);
+    }
+    if (peak > blockPeak.load(std::memory_order_relaxed)) blockPeak.store(peak, std::memory_order_relaxed);
+    lastAudioMs = millis();
+}
+
 static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
     if (!linked) {
         if (handoverPending && (probeKind == kProbeHandover || (wantChannel == channel && wantPair != pairId)) &&
@@ -402,15 +416,27 @@ static void onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len
             static int16_t pcm[wlink::kPacketSamples];
             const uint16_t n = a->samples;
             memcpy(pcm, data + offsetof(wlink::AudioPacket, pcm), n * sizeof(int16_t));
-            if (a->h.flags & wlink::kFlagStreamStart) jitter.streamStart();
-            jitter.pushBlock(a->seq, pcm, n);
-            uint16_t peak = 0;
-            for (uint16_t i = 0; i < n; ++i) {
-                const int v = pcm[i] < 0 ? -int(pcm[i]) : pcm[i];
-                if (v > peak) peak = uint16_t(v > 32767 ? 32767 : v);
-            }
-            if (peak > blockPeak.load(std::memory_order_relaxed)) blockPeak.store(peak, std::memory_order_relaxed);
-            lastAudioMs = millis();
+            micBlockIn(a->seq, a->h.flags, pcm, n);
+            break;
+        }
+        case wlink::kMonoMulaw: {  // 1.4.5: microphone audio at distance = normal
+            if (speakerMode()) break;
+            static int16_t pcm[wlink::kPacketSamples];
+            const auto* mp = reinterpret_cast<const wlink::MonoMulawPacket*>(data);  // bytes: no alignment needed
+            for (int i = 0; i < wlink::kPacketSamples; ++i) pcm[i] = wlink::mulawDecode(mp->data[i]);
+            micBlockIn(mp->seq, mp->h.flags, pcm, wlink::kPacketSamples);
+            break;
+        }
+        case wlink::kMonoAdpcm: {  // 1.4.5: microphone audio at distance = far
+            if (speakerMode()) break;
+            static wlink::MonoAdpcmPacket a;  // aligned copy (the radio buffer may not be)
+            memcpy(&a, data, sizeof(a));
+            static int16_t pcm[wlink::kPacketSamples];
+            adpcm::Decoder d;
+            d.predictor = a.predictor;
+            d.index = a.index;
+            adpcm::decode(d, a.data, wlink::kPacketSamples, pcm, 1);
+            micBlockIn(a.seq, a.h.flags, pcm, wlink::kPacketSamples);
             break;
         }
         case wlink::kStatus:
@@ -1641,7 +1667,7 @@ void setup() {
     }
     USB.productName(name);
     USB.manufacturerName("Wireless USB Audio Extender");
-    USB.firmwareVersion(0x0144);
+    USB.firmwareVersion(0x0145);
     USB.onEvent(onUsbEvent);
     LogPort.setTxTimeoutMs(20);  // never stall when no terminal is open
     LogPort.onEvent(onSerialEvent);

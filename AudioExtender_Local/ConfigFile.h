@@ -15,7 +15,7 @@
 //                        at start and when the drive opens, never while audio streams)
 //   mic_level = 100      0..100 (% of the adapter's level range; AtomS3U: of 0..+30 dB gain),
 //                        or adapter (leave the adapter's own level); "default" = 100 (remote)
-//   distance = normal    near, normal or far: radio rate of the link (both boards)
+//   distance = normal    near, normal or far: radio rate and audio format of the link (both boards)
 //   mode = auto          auto, microphone or speaker (both boards)
 //   remote = any         any, or the remote's MAC address: lock the pair (both boards)
 //
@@ -233,8 +233,8 @@ inline int format(const Settings& s, char* out, size_t cap) {
         "                       # adapter = leave the adapter's own level. AtomS3U: the built-in mic's\r\n"
         "                       # gain, 0-100 = 0 to +30 dB. status.txt shows it in dB. In speaker\r\n"
         "                       # mode it sets the adapter's speaker level\r\n"
-        "distance = %s       # near, normal or far: far reaches furthest but copes worst with busy\r\n"
-        "                       # Wi-Fi; near is the most robust where Wi-Fi is busy (both boards)\r\n"
+        "distance = %s       # near, normal or far: radio rate and audio format; far reaches furthest,\r\n"
+        "                       # near is uncompressed (see distance.md; both boards)\r\n"
         "mode = %s             # auto, microphone or speaker: which way the audio goes. auto decides\r\n"
         "                       # when the remote starts: a mic signal = microphone, silence = speaker\r\n"
         "                       # (with a microphone always connected, microphone is the safe choice)\r\n"

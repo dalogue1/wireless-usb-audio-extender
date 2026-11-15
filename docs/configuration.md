@@ -25,7 +25,7 @@ cpu_mhz = 240        # 240 or 160: processor speed of both boards (160 runs a li
 highpass = on        # on, off: remove rumble, wind and hum below highpass_hz (remote)
 highpass_hz = 200    # 50-1000: high-pass cut-off in Hz
 mic_level = 100      # 0-100: the adapter's microphone level, % of its range; adapter = leave it (AtomS3U: gain)
-distance = normal    # near, normal or far: radio rate of the link (both boards)
+distance = normal    # near, normal or far: radio rate and audio format of the link (both boards)
 mode = auto          # auto, microphone or speaker: which way the audio goes
 remote = any         # any, or the remote's MAC address: lock the pair to each other
 ```

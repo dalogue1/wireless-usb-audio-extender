@@ -11,7 +11,8 @@
 // by the PC's clock) in, and the USB host's 1 ms playback packets to the adapter out
 // (timed by the remote's own clock), so the adapter receives the PC's true rate.
 //
-// The buffer holds about kTargetSamples (68 ms; 60 ms before the 12 ms packets) of audio. The remote's audio
+// The buffer holds about kTargetSamples of audio (microphone, local board: 150 ms since 1.4.5,
+// 68 ms before; speaker, remote: 68 ms). The remote's audio
 // adapter has its own crystal, so it produces slightly more or fewer than
 // 48,000 samples per PC second. frame() normally hands 48 samples to USB;
 // when the (smoothed) fill level sits above the target it hands 49, below the
@@ -22,7 +23,7 @@
 // Single producer / single consumer, lock-free. Plain C++ (no Arduino), so
 // tests/jitter_buffer_test.cpp can simulate it on a PC.
 //
-// JitterBufferT<kCh>: kCh interleaved channels per frame (1.4.2: the remote's speaker
+// JitterBufferT<kCh, kCap, kTarget>: kCh interleaved channels per frame (1.4.2: the remote's speaker
 // buffer is stereo). All counts and positions are in frames (one sample per channel);
 // pcm/out hold n * kCh values. JitterBuffer = the mono one.
 #include <atomic>
@@ -30,13 +31,13 @@
 #include <stdint.h>
 #include <string.h>
 
-template <uint8_t kCh>
+template <uint8_t kCh, uint32_t kCap = 8192, uint32_t kTarget = 3264>
 class JitterBufferT {
     static_assert(kCh == 1 || kCh == 2, "mono or stereo");
 public:
     static constexpr uint8_t kChannels = kCh;
-    static constexpr uint32_t kCapacity = 8192;            // frames (170 ms), power of two
-    static constexpr uint32_t kTargetSamples = 3264;       // 68 ms: same stall margin as 60 ms had with 4 ms packets
+    static constexpr uint32_t kCapacity = kCap;            // frames, power of two (8192 = 170 ms)
+    static constexpr uint32_t kTargetSamples = kTarget;    // 3264 = 68 ms; 7200 = 150 ms (microphone, 1.4.5)
     static constexpr int32_t kHysteresis = 96;             // +-2 ms around the target
     static constexpr uint32_t kMinFramesBetweenAdjust = 16; // max correction ~1300 ppm
     static constexpr int32_t kResyncAbove = 2400;          // > target + 50 ms: drop to target
@@ -198,5 +199,7 @@ private:
     Stats stats_;
 };
 
-using JitterBuffer = JitterBufferT<1>;
+// Microphone (local board), 1.4.5: 150 ms rides through radio hold-ups (busy channel,
+// retries at `far`) that emptied the 68 ms buffer; BirdNET doesn't mind the latency.
+using JitterBuffer = JitterBufferT<1, 16384, 7200>;
 using StereoJitterBuffer = JitterBufferT<2>;

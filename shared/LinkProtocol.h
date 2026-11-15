@@ -19,7 +19,7 @@
 namespace wlink {
 
 constexpr uint32_t kMagic = 0x314D5557;  // "WUM1" little-endian
-constexpr uint8_t kVersion = 17; // 1.4.4: temperature only at start and drive opening (no 10-min reads); v16 = 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
+constexpr uint8_t kVersion = 19; // 1.4.5: microphone audio ADPCM at far, mu-law at normal (v18: ADPCM at far only); v17 = 1.4.4: temperature only at start and drive opening (no 10-min reads); v16 = 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
                                   // temperature + cpu_mhz; v6 = 1.2.4: tx_power; v5 = 1.2.3: mic 1..9;
                                   // v4 = 1.2.2: silent-mic status; v3 = 1.2.0: config.txt
 
@@ -62,6 +62,8 @@ enum Type : uint8_t {
     kStereoAudio = 13,  // local -> remote (speaker mode): 12 ms of the PC's stereo audio, IMA ADPCM
     kTempRequest = 14,  // local -> remote: read the chip temperature once now (drive opening);
                         // the remote's next status carries it with tempFresh = 1
+    kMonoAdpcm = 15,    // remote -> local (microphone, distance = far): 12 ms as IMA ADPCM
+    kMonoMulaw = 16,    // remote -> local (microphone, distance = normal): 12 ms as 8-bit mu-law
 };
 constexpr uint32_t kTempSnapshotKeepMs = 30000;  // remote: a snapshot is reported this long
 
@@ -89,7 +91,7 @@ inline const char* boardName(uint8_t b) { return b == kBoardAtomS3U ? "AtomS3U" 
 enum Distance : uint8_t { kDistanceNormal = 0, kDistanceNear = 1, kDistanceFar = 2 };
 inline const char* distanceName(uint8_t d) { return d == kDistanceNear ? "near" : d == kDistanceFar ? "far" : "normal"; }
 inline const char* distanceRateText(uint8_t d) {
-    return d == kDistanceNear ? "12 Mbit/s" : d == kDistanceFar ? "2 Mbit/s" : "6 Mbit/s";
+    return d == kDistanceNear ? "12 Mbit/s" : d == kDistanceFar ? "2 Mbit/s, ADPCM audio" : "6 Mbit/s, mu-law audio";
 }
 
 enum Flags : uint8_t {
@@ -155,6 +157,49 @@ struct __attribute__((packed)) StereoAudioPacket {
     uint8_t index[2];      // step index 0..88
     uint8_t data[2 * kAdpcmChannelBytes];  // left channel, then right
 };
+
+// Microphone at distance = far (1.4.5): 12 ms of mono audio as IMA ADPCM (4 bits per sample),
+// a quarter of the PCM packet, so the slow 2 Mbit/s rate takes about as much air time as
+// `normal`. predictor/index: the encoder's state at the first sample (each packet decodes
+// on its own; a lost packet costs 12 ms, nothing more).
+struct __attribute__((packed)) MonoAdpcmPacket {
+    Header h;
+    uint32_t seq;          // packet counter, +1 per packet (same sequence as kAudio)
+    uint16_t frames;       // always kPacketSamples
+    int16_t predictor;
+    uint8_t index;         // step index 0..88
+    uint8_t data[kAdpcmChannelBytes];
+};
+
+// Microphone at distance = normal (1.4.5): 12 ms of mono audio as 8-bit mu-law (G.711), half
+// the PCM packet. Its noise stays about 38 dB below the sound at any level (31 dB below the
+// background in a real outdoor recording): no practical loss, about 10 % air time instead of 14 %.
+struct __attribute__((packed)) MonoMulawPacket {
+    Header h;
+    uint32_t seq;          // packet counter, +1 per packet (same sequence as kAudio)
+    uint16_t frames;       // always kPacketSamples
+    uint8_t data[kPacketSamples];
+};
+
+// G.711 mu-law (the classic 8-bit telephone code: sign, 3-bit segment, 4-bit step).
+inline uint8_t mulawEncode(int16_t pcm) {
+    constexpr int kBias = 0x84, kClip = 32635;
+    int s = pcm;
+    const uint8_t sign = s < 0 ? 0x80 : 0;
+    if (s < 0) s = -s;
+    if (s > kClip) s = kClip;
+    s += kBias;
+    int exp = 7;
+    for (int mask = 0x4000; (s & mask) == 0 && exp > 0; mask >>= 1) --exp;
+    const int mant = (s >> (exp + 3)) & 0x0F;
+    return uint8_t(~(sign | (exp << 4) | mant));
+}
+inline int16_t mulawDecode(uint8_t u) {
+    u = uint8_t(~u);
+    const int exp = (u >> 4) & 7, mant = u & 0x0F;
+    const int mag = (((mant << 3) + 0x84) << exp) - 0x84;
+    return int16_t((u & 0x80) ? -mag : mag);
+}
 
 struct __attribute__((packed)) PingPacket {
     Header h;
@@ -315,6 +360,15 @@ inline uint8_t check(const uint8_t* data, int len, uint8_t pairId) {
             const AudioPacket* a = reinterpret_cast<const AudioPacket*>(data);
             if (a->samples > kPacketSamples) return 0;
             return len >= (int)(offsetof(AudioPacket, pcm) + a->samples * sizeof(int16_t)) ? h->type : 0;
+        }
+        case kMonoMulaw: {
+            if (len < (int)sizeof(MonoMulawPacket)) return 0;
+            return reinterpret_cast<const MonoMulawPacket*>(data)->frames == kPacketSamples ? h->type : 0;
+        }
+        case kMonoAdpcm: {
+            if (len < (int)sizeof(MonoAdpcmPacket)) return 0;
+            const MonoAdpcmPacket* a = reinterpret_cast<const MonoAdpcmPacket*>(data);
+            return a->frames == kPacketSamples && a->index <= 88 ? h->type : 0;
         }
         case kStereoAudio: {
             if (len < (int)sizeof(StereoAudioPacket)) return 0;

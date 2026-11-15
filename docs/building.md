@@ -14,7 +14,7 @@ Most people only need the [web flasher](https://dalogue1.github.io/wireless-usb-
 | `…-update.bin` | `0x10000` | updates: the program only; keeps all of those |
 | `…-boot.bin` | `0x0` | bootloader and partition table (stops before the settings at `0x9000`); the web flasher's Update writes it with the update image, so a board still starts if the flash was erased |
 
-With esptool: `esptool --chip esp32s3 write-flash 0x0 wireless-usb-audio-extender-local-1.4.4-dev-full.bin`. **Both boards must run the same version**: the radio protocol changes between versions.
+With esptool: `esptool --chip esp32s3 write-flash 0x0 wireless-usb-audio-extender-local-1.4.5-dev-full.bin`. **Both boards must run the same version**: the radio protocol changes between versions.
 
 The same two images run on the Seeed XIAO ESP32-S3 and the M5Stack [AtomS3U](atoms3u.md): at start-up each reads the chip's factory eFuses (the XIAO's ESP32-S3R8 has PSRAM in the package, the AtomS3U's ESP32-S3FN8 has flash there instead) and picks that board's LED, button and, on the remote, its microphone: a USB audio adapter on the XIAO, the built-in PDM microphone (read through the S3's hardware PDM-to-PCM filter) on the AtomS3U.
 
@@ -59,9 +59,9 @@ firmware/               prebuilt images
 
 **Radio.** The two boards talk directly with ESP-NOW, Espressif's connectionless Wi-Fi protocol: no router, access point or IP addresses. The remote announces itself (5 times a second) on its channel; a local board with the same mic number answers, and from then on they use acknowledged, retried unicast. Each side pings and reports status; after 2 s of silence both drop the link and look again. The paired link runs at the [`distance`](distance.md) rate. Audio goes in 12 ms packets (576 samples, 83 a second) with a sequence number; a lost packet becomes 12 ms of silence, so timing never slips.
 
-**Microphone path.** The remote reads the adapter through its own USB host driver (`usbmic/`), applies the [filters](noise-filter.md) and sends 48 kHz mono 16-bit audio. The local board presents a standard USB Audio Class 1 microphone, so no drivers are needed on any computer.
+**Microphone path.** The remote reads the adapter through its own USB host driver (`usbmic/`), applies the [filters](noise-filter.md) and sends 48 kHz mono audio in 12 ms packets. The [`distance`](distance.md) setting picks the format: uncompressed 16-bit at `near`, 8-bit µ-law at `normal`, IMA ADPCM at `far` (1.4.5 and later). Each packet decodes on its own, so a lost packet costs 12 ms and nothing more. The local board presents a standard USB Audio Class 1 microphone, so no drivers are needed on any computer.
 
-**Clock drift ("47/49").** The adapter's crystal and the computer's USB clock never match exactly. The local board keeps about 68 ms of audio in a buffer; each 1 ms USB frame it gives the computer 48 samples, or 49 when the buffer is running full and 47 when it is running empty, the way real asynchronous USB microphones do it. No sample is changed, no resampling. Announcements are mixed in last.
+**Clock drift ("47/49").** The adapter's crystal and the computer's USB clock never match exactly. The local board keeps about 150 ms of audio in a buffer (68 ms before 1.4.5), enough to ride through short radio hold-ups; each 1 ms USB frame it gives the computer 48 samples, or 49 when the buffer is running full and 47 when it is running empty, the way real asynchronous USB microphones do it. No sample is changed, no resampling. Announcements are mixed in last.
 
 **Speaker path.** The same, reversed: the local board presents a stereo USB speaker and sends the computer's samples in 12 ms packets, each channel as IMA ADPCM (4 bits per sample, 596-byte packets: half of a mono 16-bit packet). Every packet carries the encoder's state at its start, so a lost packet costs 12 ms of silence and nothing more. The remote decodes, keeps the buffer and gives the adapter 47, 48 or 49 stereo frames per millisecond, following the computer's clock.
 

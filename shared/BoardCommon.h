@@ -209,9 +209,9 @@ private:
 
 // ---------------------------------------------------------------- radio
 // Radio rate of the paired link, from config.txt `distance` (wlink::Distance):
-//   near   = 12 Mbit/s OFDM: ~7 % of the channel for the audio stream; most robust where Wi-Fi is busy
-//   normal = 6 Mbit/s OFDM (default): ~14 % airtime, about 2-3 dB more reach than 12 Mbit/s
-//   far    = 2 Mbit/s DSSS: ~45 % airtime, the longest reach, least tolerant of other Wi-Fi traffic
+//   near   = 12 Mbit/s OFDM, uncompressed audio: ~7 % of the channel; most robust where Wi-Fi is busy
+//   normal = 6 Mbit/s OFDM (default), mu-law audio: ~10 % airtime, about 2-3 dB more reach than near
+//   far    = 2 Mbit/s DSSS, ADPCM audio: ~16 % airtime, the longest reach
 // Beacons (broadcast) always go at the ESP-NOW default 1 Mbit/s.
 inline void linkRate(uint8_t distance, wifi_phy_mode_t& mode, wifi_phy_rate_t& rate) {
     if (distance == wlink::kDistanceNear) { mode = WIFI_PHY_MODE_11G; rate = WIFI_PHY_RATE_12M; }

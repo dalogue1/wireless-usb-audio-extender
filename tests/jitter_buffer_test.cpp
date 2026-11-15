@@ -106,15 +106,24 @@ int main() {
         expectTrue(r.st.underruns == 0, "no underruns on a clean link");
         expectTrue(r.discontinuities == 0, "every sample delivered once, in order");
         expectTrue(std::fabs(r.ppmMeasured - ppm) < 10 + std::fabs(ppm) * 0.05, "drift measured");
-        expectTrue(r.minLevel > 1000 && r.maxLevel < 5000, "level stays near 68 ms");
+        expectTrue(r.minLevel > 5000 && r.maxLevel < 9500, "level stays near 150 ms");
     }
 
     // Busy radio: up to 25 ms jitter, a 40 ms stall every 7 s.
     {
         Result r = run(80, 600, 25, 7, 40, 0, 2);
         print("jitter 25 ms + 40 ms stalls", 80, r);
-        expectTrue(r.st.underruns == 0, "40 ms stalls absorbed by the 68 ms buffer");
+        expectTrue(r.st.underruns == 0, "40 ms stalls absorbed by the 150 ms buffer");
         expectTrue(r.discontinuities == 0, "no breaks with stalls");
+    }
+
+    // 1.4.5: hold-ups of 120 ms (busy channel, retries at `far`), then the burst: absorbed.
+    {
+        Result r = run(80, 600, 25, 5, 120, 0, 5);
+        print("jitter 25 ms + 120 ms stalls", 80, r);
+        expectTrue(r.st.underruns == 0, "120 ms stalls absorbed by the 150 ms buffer");
+        expectTrue(r.discontinuities == 0, "no breaks with 120 ms stalls");
+        expectTrue(r.maxLevel < JitterBuffer::kCapacity, "no overflow after the bursts");
     }
 
     // Lost packets (0.5 %): each loss is 4 ms of silence; timing must hold.
