@@ -8,3 +8,9 @@ and 1.4.3 still saw the AtomS3U remote restart at its first read with an empty q
 The `temperature` setting is removed; an old line in config.txt is ignored.
 Hourly/event health lines no longer show temperatures. 75 C warnings remain (start and
 drive-opening readings).
+
+Web flasher: the Update buttons left the board unable to start (ESP Web Tools erases the
+whole flash first unless told not to, then wrote only the program). Update now asks
+"Erase device?" (leave it unticked to keep settings) and also writes a new
+firmware/*-boot.bin (bootloader + partition table, 0x0-0x8FFF), so a board starts either
+way. Recovery for a board that won't start: Install (full image).

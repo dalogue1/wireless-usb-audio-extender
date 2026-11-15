@@ -12,6 +12,7 @@ Most people only need the [web flasher](https://dalogue1.github.io/wireless-usb-
 |---|---|---|
 | `…-full.bin` | `0x0` | first install: the whole flash; **resets** settings, `config.txt`, voice files and the event log |
 | `…-update.bin` | `0x10000` | updates: the program only; keeps all of those |
+| `…-boot.bin` | `0x0` | bootloader and partition table (stops before the settings at `0x9000`); the web flasher's Update writes it with the update image, so a board still starts if the flash was erased |
 
 With esptool: `esptool --chip esp32s3 write-flash 0x0 wireless-usb-audio-extender-local-1.4.4-dev-full.bin`. **Both boards must run the same version**: the radio protocol changes between versions.
 

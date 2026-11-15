@@ -38,7 +38,7 @@ code{background:#eef0f4;padding:1px 5px;border-radius:4px}
     <esp-web-install-button manifest="local-install.json"><button slot="activate">Install local board</button><span slot="unsupported"></span></esp-web-install-button>
     <esp-web-install-button manifest="local-update.json"><button slot="activate" class="btn alt">Update (keep settings)</button><span slot="unsupported"></span></esp-web-install-button>
   </div>
-  <p class="note">Install: the first time, or to start over (resets config.txt, voice files and saved settings). Update: from 1.1 or later, keeps them. The same firmware runs on a XIAO ESP32-S3 or an AtomS3U, with either kind of remote.</p>
+  <p class="note">Install: the first time, or to start over (resets config.txt, voice files and saved settings). Update: keeps them &mdash; <b>leave &ldquo;Erase device&rdquo; unticked</b> when the flasher asks (ticked, it works like Install). The same firmware runs on a XIAO ESP32-S3 or an AtomS3U, with either kind of remote.</p>
 </div>
 
 <div class="board">
@@ -47,7 +47,7 @@ code{background:#eef0f4;padding:1px 5px;border-radius:4px}
     <esp-web-install-button manifest="remote-install.json"><button slot="activate">Install remote board</button><span slot="unsupported"></span></esp-web-install-button>
     <esp-web-install-button manifest="remote-update.json"><button slot="activate" class="btn alt">Update (keep settings)</button><span slot="unsupported"></span></esp-web-install-button>
   </div>
-  <p class="note">The same firmware runs on a XIAO ESP32-S3 (with a USB audio adapter) or an AtomS3U (built-in microphone), with either kind of local board. Once flashed, the XIAO remote's USB-C port works as a USB host for the audio adapter, so it never shows up as a port unless BOOT is held while plugging it in.</p>
+  <p class="note">Update keeps the remote's settings: <b>leave &ldquo;Erase device&rdquo; unticked</b>. The same firmware runs on a XIAO ESP32-S3 (with a USB audio adapter) or an AtomS3U (built-in microphone), with either kind of local board. Once flashed, the XIAO remote's USB-C port works as a USB host for the audio adapter, so it never shows up as a port unless BOOT is held while plugging it in.</p>
 </div>
 
 <h2>Then</h2>

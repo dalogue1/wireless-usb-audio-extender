@@ -28,6 +28,10 @@ for v in local remote; do
   cp "$OUT/$v"/*.merged.bin "firmware/wireless-usb-audio-extender-$v-$VERSION-full.bin"
   # update: application only, keeps settings and voice files, at 0x10000
   cp "$OUT/$v"/*.ino.bin "firmware/wireless-usb-audio-extender-$v-$VERSION-update.bin"
+  # boot: bootloader + partition table (0x0-0x8FFF, stops before nvs at 0x9000), at 0x0.
+  # The web flasher's update writes it too, so a board still starts if the flash was
+  # erased first (ESP Web Tools erases unless the user leaves "Erase device" unticked).
+  head -c 36864 "$OUT/$v"/*.merged.bin > "firmware/wireless-usb-audio-extender-$v-$VERSION-boot.bin"
 done
 (cd firmware && sha256sum *.bin > SHA256SUMS)
 ls -1 firmware
