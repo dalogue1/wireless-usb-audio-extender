@@ -30,7 +30,7 @@
 
 ### Microphone plugs
 
-Adapters come with either one combined 4-pole jack (**TRRS**, for headsets) or separate 3-pole jacks (**TRS**: green for headphones, pink for the microphone). A TRRS microphone in a TRS mic jack, or the other way round, gives **silence**: the mic contact lands on ground. Use a mic with the plug that matches the jack, or a TRRS-to-mic/headphone splitter cable. After 20 s of silence the remote's LED blinks fast, the log says `NO MICROPHONE SIGNAL` and the local board says "No microphone signal".
+Adapters come with either one combined 4-pole jack (**TRRS**, for headsets) or separate 3-pole jacks (**TRS**: green for headphones, pink for the microphone). A TRRS microphone in a TRS mic jack, or the other way round, gives **silence**: the mic contact lands on ground. Use a mic with the plug that matches the jack, or a TRRS-to-mic/headphone splitter cable. For a microphone you built yourself, check its wiring: [Building your own microphone](diy-microphone.md#wiring). After 20 s of silence the remote's LED blinks fast, the log says `NO MICROPHONE SIGNAL` and the local board says "No microphone signal".
 
 ## Restarting your software
 

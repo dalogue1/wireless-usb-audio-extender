@@ -42,7 +42,7 @@ Only the two XIAO ESP32-S3 boards are required. The links are examples, not reco
 * **Boards:** an ESP32-**S3** (not the C3, C5 or C6). Its antenna is required.
 * **OTG splitter:** USB-C OTG with a separate charging input, so the remote and the adapter get power.
 * **Audio adapter:** **USB Audio Class 1**. Few listings say so, but one that names **Nintendo Switch or PS5** support is a good sign.
-* **Microphone:** its plug must match the adapter's jack: **TRRS** (one combined headset jack) with TRRS, **TRS** (separate pink mic jack) with TRS. A mismatch gives silence. If you like soldering, [Soldering the AOM 5024 Microphone Capsule](https://syllepsis.live/2022/10/27/soldering-the-aom-5024-microphone-capsule/) shows a simple mono build: the capsule soldered to a TRRS cable, plugged into a USB audio adapter, for BirdNET-Pi. For your own build, the version with pins, [AOM-5024P-HD-MB-R](https://www.digikey.com/en/products/detail/pui-audio-inc/AOM-5024P-HD-MB-R/16585482), is easier to solder than the solder-pad one in that post, and the pins keep the soldering heat away from the capsule, which the post warns can damage it.
+* **Microphone:** its plug must match the adapter's jack: **TRRS** (one combined headset jack) with TRRS, **TRS** (separate pink mic jack) with TRS. A mismatch gives silence. If you like soldering, you can [build your own](docs/diy-microphone.md) from a microphone capsule.
 * **Data cable:** it must carry **data**, not just charge. It flashes both boards, then connects the local board to the computer.
 * **Power supply:** 5 V, 1 A or more, with a USB-C plug for the splitter's charging input.
 
@@ -67,6 +67,7 @@ Snap the antennas on before powering the boards, keep the local board's antenna 
 * **[Speaker mode](docs/speaker-mode.md)**: the same boards as a wireless stereo speaker
 * **[Voice feedback](docs/voice-feedback.md)**: the spoken announcements, other languages, your own voice
 * **[LEDs and troubleshooting](docs/troubleshooting.md)**: what the lights mean, common problems, recovery, the serial log
+* **[Building your own microphone](docs/diy-microphone.md)**: a capsule on a cable, wiring for TRRS and TRS plugs
 * **[AtomS3U boards](docs/atoms3u.md)**: an even simpler extender from USB-stick-sized boards with a built-in mic
 * **[Building from source](docs/building.md)**: Arduino IDE settings, firmware images, tests, how it works
 * **[Acknowledgements](docs/acknowledgements.md)**: esp32-birdnet-mic and the other projects this builds on
