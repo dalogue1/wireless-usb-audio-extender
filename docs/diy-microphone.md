@@ -7,8 +7,13 @@ Any ready-made microphone with the right plug works with the extender. If you li
 ## Parts
 
 * **Capsule:** [AOM-5024P-HD-MB-R](https://www.digikey.com/en/products/detail/pui-audio-inc/AOM-5024P-HD-MB-R/16585482), the version with pins. It is easier to solder than the solder-pad version, and the pins keep the soldering heat away from the capsule, which can damage it.
-* **Cable:** shielded, with two inner wires.
+* **Cable:** shielded, with two inner wires, of a reasonable length. 6 ft (1.8 m) of 24 AWG two-conductor shielded security alarm wire is tested; longer may work.
 * **Plug:** 3.5 mm, matching the adapter's jack: **TRRS** for one combined headset jack, **TRS** for a separate pink mic jack ([Microphone plugs](troubleshooting.md#microphone-plugs)).
+* **Foam cover** (optional): a small windscreen over the capsule.
+
+## The simple way
+
+Cut the end off an existing cable that has the right plug, find which wire goes to the Mic contact and which to Ground with a meter (continuity from each wire to the plug contacts in the table below), and solder the capsule to them. Add a foam cover if you like.
 
 ## Wiring
 
@@ -20,7 +25,7 @@ The same on a TRRS or a TRS plug:
 | **−** | inner wire 2 | **Ground** |
 | (nothing) | shield | **Ground**, at the plug end only |
 
-Connect the shield at the plug end only, and leave it unconnected at the capsule. It then keeps interference off the two inner wires without carrying any of the microphone's own signal.
+Why the shield is connected at the plug end only: it is there to catch interference and drain it to ground. Connected at both ends, it would become a second ground wire alongside inner wire 2, and the interference it picks up would flow through the microphone's own ground and into the audio as hum or noise. Connected at one end, it carries no current and the capsule's signal stays on the two inner wires.
 
 Where Mic and Ground are on the plug:
 
@@ -34,4 +39,4 @@ This TRRS order (also called CTIA) is the one USB audio adapters use. Wiring dia
 ## Examples
 
 * [Soldering the AOM 5024 Microphone Capsule](https://syllepsis.live/2022/10/27/soldering-the-aom-5024-microphone-capsule/): a simple mono build, the capsule soldered to a TRRS cable and plugged into a USB audio adapter, for BirdNET-Pi.
-* [Another example](https://www.instagram.com/p/DHVruFYzuSa/) (Instagram).
+* [Microphone jack connections](https://www.instagram.com/p/DHVruFYzuSa/) (Instagram).
