@@ -45,7 +45,7 @@ An AtomS3U remote is always a microphone: its USB plug goes into the power suppl
 |:---|:---:|:---|
 | Seeed XIAO ESP32-S3 with antenna (local board) | 1 | [Amazon](https://www.amazon.com/dp/B0DJ6NQFKX) |
 | M5Stack AtomS3U (remote board) | 1 | [M5Stack](https://docs.m5stack.com/en/products/sku/K125) |
-| USB data cable for the XIAO (USB-C to USB-C or USB-A) | 1 | [Amazon](https://www.amazon.com/dp/B0GS4GDX9Y) |
+| USB data cable for the XIAO (USB-C to USB-C or USB-A) | 1 | [Amazon](https://www.amazon.com/dp/B0GS4NWLML) |
 | USB-A power supply, 5 V | 1 | any phone charger with a USB-A socket |
 | Case for the XIAO, 3D printed (optional) | 1 | [Printables](https://www.printables.com/model/1275829-seeed-xiao-esp32-s3-case) (by Robert ATS Duct) |
 

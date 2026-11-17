@@ -31,7 +31,7 @@ The species are BirdNET's own identifications, not checked by ear.
 | USB-C OTG splitter with charging input | 1 | [Amazon](https://www.amazon.com/dp/B0CQKZRDHF) |
 | USB audio adapter, TRRS **or** TRS | 1 | [TRRS](https://www.amazon.com/dp/B08Y8CZB2S) · [TRS](https://www.amazon.com/dp/B01N905VOY) |
 | Microphone, matching the adapter | 1 | [TRRS](https://www.amazon.com/dp/B0FYV4N2QP) ¹ · [TRS](https://www.amazon.com/dp/B0F53KLB3Y) ¹ |
-| USB data cable (USB-C to USB-C or USB-A) | 1 | [Amazon](https://www.amazon.com/dp/B0GS4GDX9Y) ¹ |
+| USB data cable (USB-C to USB-C or USB-A) | 1 | [Amazon](https://www.amazon.com/dp/B0GS4NWLML) |
 | USB-C power supply, 5 V 1 A+ | 1 | [Amazon](https://www.amazon.com/dp/B0D3FZ5VQM) ¹ |
 | Case, 3D printed (optional) | 2 | [Printables](https://www.printables.com/model/1275829-seeed-xiao-esp32-s3-case) (by Robert ATS Duct) |
 
