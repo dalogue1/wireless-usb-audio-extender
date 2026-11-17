@@ -15,11 +15,12 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 namespace wlink {
 
 constexpr uint32_t kMagic = 0x314D5557;  // "WUM1" little-endian
-constexpr uint8_t kVersion = 19; // 1.4.5: microphone audio ADPCM at far, mu-law at normal (v18: ADPCM at far only); v17 = 1.4.4: temperature only at start and drive opening (no 10-min reads); v16 = 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
+constexpr uint8_t kVersion = 20; // 1.4.7: audio_compression setting (in config, ack and status); v19 = 1.4.5: microphone audio ADPCM at far, mu-law at normal (v18: ADPCM at far only); v17 = 1.4.4: temperature only at start and drive opening (no 10-min reads); v16 = 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
                                   // temperature + cpu_mhz; v6 = 1.2.4: tx_power; v5 = 1.2.3: mic 1..9;
                                   // v4 = 1.2.2: silent-mic status; v3 = 1.2.0: config.txt
 
@@ -98,8 +99,31 @@ inline const char* boardName(uint8_t b) { return b == kBoardAtomS3U ? "AtomS3U" 
 // config.txt `distance`: the radio rate of the paired link (the further, the slower).
 enum Distance : uint8_t { kDistanceNormal = 0, kDistanceNear = 1, kDistanceFar = 2 };
 inline const char* distanceName(uint8_t d) { return d == kDistanceNear ? "near" : d == kDistanceFar ? "far" : "normal"; }
-inline const char* distanceRateText(uint8_t d) {
-    return d == kDistanceNear ? "12 Mbit/s" : d == kDistanceFar ? "2 Mbit/s, ADPCM audio" : "6 Mbit/s, mu-law audio";
+// config.txt `audio_compression` (1.4.7): the microphone audio format. auto follows distance
+// (near = none, normal = low, far = high); the others force it at any distance.
+enum Compression : uint8_t { kCompAuto = 0, kCompNone = 1, kCompLow = 2, kCompHigh = 3 };
+inline uint8_t compressionValid(uint8_t c) { return c <= kCompHigh ? c : kCompAuto; }
+inline const char* compressionName(uint8_t c) {
+    static const char* const n[] = {"auto", "none", "low", "high"};
+    return n[compressionValid(c)];
+}
+// The format actually used: kCompNone, kCompLow or kCompHigh.
+inline uint8_t compressionInEffect(uint8_t distance, uint8_t c) {
+    c = compressionValid(c);
+    if (c != kCompAuto) return c;
+    return distance == kDistanceNear ? kCompNone : distance == kDistanceFar ? kCompHigh : kCompLow;
+}
+inline const char* compressionAudioText(uint8_t inEffect) {
+    return inEffect == kCompNone ? "uncompressed audio" : inEffect == kCompHigh ? "ADPCM audio" : "mu-law audio";
+}
+// "6 Mbit/s, mu-law audio", or with an override "2 Mbit/s, mu-law audio, audio_compression low".
+inline const char* distanceRateText(uint8_t d, uint8_t c = kCompAuto) {
+    static char b[64];
+    const char* rate = d == kDistanceNear ? "12 Mbit/s" : d == kDistanceFar ? "2 Mbit/s" : "6 Mbit/s";
+    c = compressionValid(c);
+    snprintf(b, sizeof(b), "%s, %s%s%s", rate, compressionAudioText(compressionInEffect(d, c)),
+             c == kCompAuto ? "" : ", audio_compression ", c == kCompAuto ? "" : compressionName(c));
+    return b;
 }
 
 enum Flags : uint8_t {
@@ -256,6 +280,7 @@ struct __attribute__((packed)) StatusPacket {
     char name[40];
     char problem[48];
     uint8_t board;          // BoardKind the remote runs on
+    uint8_t compression;    // 1.4.7: Compression setting in effect (audio_compression)
 };
 
 // Settings the local board wants the remote to use. newPairId/newChannel differ from
@@ -273,7 +298,7 @@ struct __attribute__((packed)) ConfigPacket {
     uint8_t cpuMhz;       // processor speed, 240 or 160
     uint8_t highpassOn;   // high-pass filter on/off
     uint16_t highpassHz;  // its cut-off, 50..1000 Hz
-    uint8_t reserved1;      // was temperatureOn (up to 1.4.3); 0
+    uint8_t compression;    // 1.4.7: Compression (audio_compression); was temperatureOn up to 1.4.3
     uint8_t micLevel;       // the adapter's level: 0..100 % of its range, or kLevelDefault
     uint8_t distance;       // Distance: radio rate of the paired link
     uint8_t modeSetting;    // ModeSetting
@@ -290,7 +315,7 @@ struct __attribute__((packed)) ConfigAckPacket {
     uint8_t cpuMhz;               // in effect now
     uint8_t highpassOn;           // in effect now
     uint16_t highpassHz;          // in effect now
-    uint8_t reserved1;            // was temperatureOn (up to 1.4.3); 0
+    uint8_t compression;          // 1.4.7: Compression setting in effect now
     uint8_t micLevel;             // in effect now
     uint8_t distance;             // in effect now
     uint8_t modeSetting;          // saved (a change restarts the remote)

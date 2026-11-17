@@ -16,6 +16,8 @@
 //   mic_level = 100      0..100 (% of the adapter's level range; AtomS3U: of 0..+30 dB gain),
 //                        or adapter (leave the adapter's own level); "default" = 100 (remote)
 //   distance = normal    near, normal or far: radio rate and audio format of the link (both boards)
+//   audio_compression = auto   auto, none, low or high: microphone audio format; auto follows
+//                        distance (near = none, normal = low, far = high)  (both boards, 1.4.7)
 //   mode = auto          auto, microphone or speaker (both boards)
 //   remote = any         any, or the remote's MAC address: lock the pair (both boards)
 //
@@ -47,13 +49,14 @@ struct Settings {
     uint16_t highpassHz = 200;  // 50..1000
     uint8_t micLevel = 100;  // 0..100 %, or kLevelDefault (leave the adapter's own level)
     uint8_t distance = 0;   // 0 normal, 1 near, 2 far            (wlink::Distance order)
+    uint8_t compression = 0;  // 0 auto, 1 none, 2 low, 3 high    (wlink::Compression order)
     uint8_t mode = 0;       // 0 auto, 1 microphone, 2 speaker    (wlink::ModeSetting order)
     bool lock = false;      // remote = <MAC>: link only to that remote, and lock it to this local board
     uint8_t remoteMac[6] = {0, 0, 0, 0, 0, 0};
     bool operator==(const Settings& o) const {
         return mic == o.mic && channel == o.channel && feedback == o.feedback && filter == o.filter && adapt == o.adapt &&
                txPower == o.txPower && cpuMhz == o.cpuMhz && highpass == o.highpass && highpassHz == o.highpassHz &&
-               micLevel == o.micLevel && distance == o.distance && mode == o.mode &&
+               micLevel == o.micLevel && distance == o.distance && compression == o.compression && mode == o.mode &&
                lock == o.lock && memcmp(remoteMac, o.remoteMac, 6) == 0;
     }
 };
@@ -90,6 +93,7 @@ inline const char* txPowerText(uint8_t dbm) {
 }
 inline const char* adaptName(uint8_t v) { static const char* const n[] = {"normal", "slow", "fast"}; return n[v < 3 ? v : 0]; }
 inline const char* distanceName(uint8_t v) { static const char* const n[] = {"normal", "near", "far"}; return n[v < 3 ? v : 0]; }
+inline const char* compressionName(uint8_t v) { static const char* const n[] = {"auto", "none", "low", "high"}; return n[v < 4 ? v : 0]; }
 inline const char* modeName(uint8_t v) { static const char* const n[] = {"auto", "microphone", "speaker"}; return n[v < 3 ? v : 0]; }
 
 // "44:BD:8D:76:CA:44" (also with '-' between the bytes, any case) -> 6 bytes. All zeros and
@@ -130,6 +134,7 @@ inline Result parse(const char* text, const Settings& base) {
     static const char* const adapt[] = {"normal", "slow", "fast"};
     static const char* const distance[] = {"normal", "near", "far"};
     static const char* const mode[] = {"auto", "microphone", "speaker"};
+    static const char* const compression[] = {"auto", "none", "low", "high"};
     int lineNo = 0;
     while (text && *text) {
         char line[160];
@@ -185,6 +190,8 @@ inline Result parse(const char* text, const Settings& base) {
                 if ((ok = (idx = pick(val, adapt, 3)) >= 0)) r.settings.adapt = uint8_t(idx);
             } else if (strcmp(key, "distance") == 0) {
                 if ((ok = (idx = pick(val, distance, 3)) >= 0)) r.settings.distance = uint8_t(idx);
+            } else if (strcmp(key, "audio_compression") == 0) {
+                if ((ok = (idx = pick(val, compression, 4)) >= 0)) r.settings.compression = uint8_t(idx);
             } else if (strcmp(key, "mode") == 0) {
                 if ((ok = (idx = pick(val, mode, 3)) >= 0)) r.settings.mode = uint8_t(idx);
                 else if ((ok = strcmp(val, "mic") == 0)) r.settings.mode = 1;
@@ -235,6 +242,8 @@ inline int format(const Settings& s, char* out, size_t cap) {
         "                       # mode it sets the adapter's speaker level\r\n"
         "distance = %s       # near, normal or far: radio rate and audio format; far reaches furthest,\r\n"
         "                       # near is uncompressed (see distance.md; both boards)\r\n"
+        "audio_compression = %s   # auto, none, low or high: microphone audio. auto follows distance\r\n"
+        "                       # (near none, normal low, far high); high = smallest, most loss\r\n"
         "mode = %s             # auto, microphone or speaker: which way the audio goes. auto decides\r\n"
         "                       # when the remote starts: a mic signal = microphone, silence = speaker\r\n"
         "                       # (with a microphone always connected, microphone is the safe choice)\r\n"
@@ -242,7 +251,7 @@ inline int format(const Settings& s, char* out, size_t cap) {
         "                       # lock it to this local board. Back to any unlocks it again.\r\n",
         s.mic, s.channel, feedbackName(s.feedback), filterName(s.filter), adaptName(s.adapt), txPowerText(s.txPower),
         unsigned(s.cpuMhz), s.highpass ? "on" : "off", unsigned(s.highpassHz), level,
-        distanceName(s.distance), modeName(s.mode), remoteText(s));
+        distanceName(s.distance), compressionName(s.compression), modeName(s.mode), remoteText(s));
 }
 
 }  // namespace cfg

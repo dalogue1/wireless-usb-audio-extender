@@ -3,7 +3,7 @@ USB Audio Extender - status when the drive was opened (0:00:15 after start)
 Local firmware 1.3.6-dev, MAC 28:84:85:B3:9C:08
   the PC sees: "Extender Mic 1" (USB microphone)
   mode setting: auto (the remote decides when an adapter is plugged in)
-  mic 1, channel 11, tx power max dBm, distance normal (6 Mbit/s)
+  mic 1, channel 11, tx power max dBm, distance normal (6 Mbit/s, mu-law audio)
   pairing: remote = any: links to any remote on mic 1 (not locked)
   audio feedback: voice
   voice files: 18 of 18 usable
@@ -18,7 +18,7 @@ USB connection to the PC (counts since start)
 
 Remote: linked
   MAC 44:BD:8D:76:CA:44 (not locked)
-  firmware 1.3.6-dev, RSSI -62 dBm, tx power max dBm, distance normal (6 Mbit/s)
+  firmware 1.3.6-dev, RSSI -62 dBm, tx power max dBm, distance normal (6 Mbit/s, mu-law audio)
   mode: microphone (microphone signal at start-up)
   processor 240 MHz, chip temperature 72.4 C (read as the drive opened)
   adapter: streaming KTMicro KT USB Audio

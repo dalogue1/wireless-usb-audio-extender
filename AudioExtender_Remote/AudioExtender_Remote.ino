@@ -49,7 +49,7 @@
 #include "esp_timer.h"
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.6-dev";
+static const char* kFirmware = "1.4.7-dev";
 static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static board::StatusLed led;
@@ -73,6 +73,7 @@ static int16_t chipTemp = wlink::kTempUnknown;
 static std::atomic<bool> tempRequested{false};
 static uint32_t tempSnapshotMs = 0;  // millis() of the drive-opening reading, 0 = none (tempFresh)
 static uint8_t distance = wlink::kDistanceNormal;  // config.txt 'distance': radio rate of the link
+static uint8_t compression = wlink::kCompAuto;     // 1.4.7: config.txt 'audio_compression' (auto follows distance)
 // Audio direction: config.txt 'mode' (saved), and what is in effect (decideMode()).
 static uint8_t modeSetting = wlink::kModeAuto;
 static std::atomic<uint8_t> audioMode{wlink::kModeMicrophone};
@@ -408,7 +409,9 @@ static void sendAudio(wlink::AudioPacket& pkt, const int16_t* pcm, uint32_t& seq
     const uint8_t flags = streamStart.exchange(false) ? wlink::kFlagStreamStart : 0;
     const void* out = &pkt;
     size_t outLen = 0;
-    if (distance == wlink::kDistanceFar) {
+    // 1.4.7: the format follows audio_compression (auto: by distance, see LinkProtocol.h).
+    const uint8_t comp = wlink::compressionInEffect(distance, compression);
+    if (comp == wlink::kCompHigh) {
         // 1.4.5: at 2 Mbit/s, PCM took about half the channel's air time; ADPCM a quarter of that.
         static wlink::MonoAdpcmPacket ap;
         static adpcm::Encoder enc;  // runs continuously; each packet carries its start state
@@ -422,7 +425,7 @@ static void sendAudio(wlink::AudioPacket& pkt, const int16_t* pcm, uint32_t& seq
         enc.encode(block, wlink::kPacketSamples, 1, ap.data);
         out = &ap;
         outLen = sizeof(ap);
-    } else if (distance == wlink::kDistanceNormal) {
+    } else if (comp == wlink::kCompLow) {
         // 1.4.5: 8-bit mu-law, half the air time, no practical loss (see LinkProtocol.h).
         static wlink::MonoMulawPacket mp;
         wlink::fill(mp.h, wlink::kMonoMulaw, pairId, flags);
@@ -431,7 +434,7 @@ static void sendAudio(wlink::AudioPacket& pkt, const int16_t* pcm, uint32_t& seq
         for (int i = 0; i < wlink::kPacketSamples; ++i) mp.data[i] = wlink::mulawEncode(pkt.pcm[i]);
         out = &mp;
         outLen = sizeof(mp);
-    } else {  // near: uncompressed
+    } else {  // none: uncompressed
         wlink::fill(pkt.h, wlink::kAudio, pairId, flags);
         pkt.seq = seq++;
         pkt.samples = wlink::kPacketSamples;
@@ -606,6 +609,7 @@ static void sendStatus() {
     p.radioQueued = uint16_t(q > 65535 ? 65535 : q);
     p.adapterInfoId = adapterInfoId;
     p.distance = distance;
+    p.compression = compression;
     p.audioMode = audioMode.load();
     p.modeSetting = modeSetting;
     p.modeReason = modeReason.load();
@@ -773,7 +777,7 @@ static String settingsText() {
     snprintf(b, sizeof(b), "mic %u | channel %u | %u MHz | high-pass %s | distance %s (%s) | mode %s",
              board::micNumber(pairId), channel, unsigned(getCpuFrequencyMhz()),
              highpassOn.load() ? (String(highpassHz.load()) + " Hz").c_str() : "off", wlink::distanceName(distance),
-             wlink::distanceRateText(distance), builtIn ? "microphone (built-in mic)" : kSet[modeSetting]);
+             wlink::distanceRateText(distance, compression), builtIn ? "microphone (built-in mic)" : kSet[modeSetting]);
     return b;
 }
 
@@ -835,7 +839,15 @@ static void handleConfig() {
         distance = dist;
         settings.put("dist", dist);
         if (linked) board::setPeerRate(localMac, dist);
-        logf("distance: %s, radio rate %s (from the local board)", wlink::distanceName(dist), wlink::distanceRateText(dist));
+        logf("distance: %s, radio rate %s (from the local board)", wlink::distanceName(dist),
+             wlink::distanceRateText(dist, compression));
+    }
+    const uint8_t comp = wlink::compressionValid(c.compression);
+    if (comp != compression) {  // 1.4.7: applies from the next audio packet
+        compression = comp;
+        settings.put("comp", comp);
+        logf("audio_compression: %s, now %s (from the local board)", wlink::compressionName(comp),
+             wlink::compressionAudioText(wlink::compressionInEffect(distance, comp)));
     }
     // Pairing by MAC: lock to this local board, or (remote = any) unlock.
     if (c.lock && (!locked || memcmp(lockMac, localMac, 6) != 0)) {
@@ -893,7 +905,7 @@ static void handleConfig() {
     a.cpuMhz = uint8_t(getCpuFrequencyMhz());
     a.highpassOn = highpassOn.load();
     a.highpassHz = highpassHz.load();
-    a.reserved1 = 0;
+    a.compression = compression;
     a.micLevel = micLevel;
     a.distance = distance;
     a.modeSetting = modeSetting;
@@ -1015,6 +1027,7 @@ void setup() {
                                                                             : wlink::kLevelDefault;
     distance = settings.get("dist", wlink::kDistanceNormal);
     if (distance > wlink::kDistanceFar) distance = wlink::kDistanceNormal;
+    compression = wlink::compressionValid(settings.get("comp", wlink::kCompAuto));
     modeSetting = settings.get("mode", wlink::kModeAuto);
     if (modeSetting > wlink::kModeSetSpeaker) modeSetting = wlink::kModeAuto;
     locked = settings.getBytes("lock", lockMac, sizeof(lockMac)) == 6 && !wlink::macIsZero(lockMac);

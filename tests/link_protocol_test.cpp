@@ -67,7 +67,7 @@ int main() {
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq), 4) == kInfoRequest);
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq) - 1, 4) == 0);
     // 1.3.6: the noise graph request and data; the version moved on (both boards must match).
-    static_assert(kVersion == 19, "protocol v19");
+    static_assert(kVersion == 20, "protocol v20");
     // 1.4.6: the remote's radio backlog of audio stays shorter than the local's 150 ms buffer,
     // and a weak signal (reports still coming) no longer counts as a stuck transmitter at once.
     static_assert(kMaxAudioQueued * 12 < 150, "audio backlog under the 150 ms buffer");
@@ -106,6 +106,16 @@ int main() {
     ma.index = 89;
     assert(check(mb, sizeof(ma), 2) == 0);
     assert(strstr(distanceRateText(kDistanceFar), "ADPCM") && strstr(distanceRateText(kDistanceNormal), "mu-law"));
+    assert(strcmp(distanceRateText(kDistanceNear), "12 Mbit/s, uncompressed audio") == 0);
+    // 1.4.7: audio_compression. auto follows distance; the others force the format at any distance.
+    assert(compressionInEffect(kDistanceNear, kCompAuto) == kCompNone);
+    assert(compressionInEffect(kDistanceNormal, kCompAuto) == kCompLow);
+    assert(compressionInEffect(kDistanceFar, kCompAuto) == kCompHigh);
+    assert(compressionInEffect(kDistanceFar, kCompNone) == kCompNone);
+    assert(compressionInEffect(kDistanceNear, kCompHigh) == kCompHigh);
+    assert(compressionValid(9) == kCompAuto);
+    assert(strcmp(distanceRateText(kDistanceFar, kCompLow), "2 Mbit/s, mu-law audio, audio_compression low") == 0);
+    assert(strcmp(distanceRateText(kDistanceNormal, kCompAuto), "6 Mbit/s, mu-law audio") == 0);
     static MonoMulawPacket mu = {};
     fill(mu.h, kMonoMulaw, 2);
     mu.frames = kPacketSamples;

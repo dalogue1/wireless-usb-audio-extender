@@ -18,6 +18,29 @@ Since 1.4.5 the remote compresses the audio at `normal` and `far`, so it takes l
 * **`normal`:** 8-bit µ-law (the telephone code), half the size. Its noise stays about 31 dB below the background in a real outdoor recording: no practical loss.
 * **`far`:** IMA ADPCM, 4 bits per sample, a quarter of the size; uncompressed, the slow rate took about 45 % of the channel. Its noise sits about 14–19 dB below the background in the 3–10 kHz bird band, which lowers a faint call's margin by roughly 0.1–0.2 dB.
 
+## Audio compression
+
+`audio_compression` in [`config.txt`](configuration.md) (1.4.7 and later, both boards) chooses the microphone audio format on its own. Most people leave it at `auto`.
+
+| Setting | Format | Packet | Sound |
+|:---|:---|:---:|:---|
+| `auto` (default) | follows `distance`: `near` = none, `normal` = low, `far` = high | | |
+| `none` | uncompressed, 16 bits per sample | 1166 bytes | exactly as captured |
+| `low` | 8-bit µ-law | 590 bytes | added noise far below any outdoor background |
+| `high` | IMA ADPCM, 4 bits per sample | 305 bytes | a small loss on faint, high calls |
+
+"High" means the most compression: the smallest packets, and the most loss, **not** the best sound. Smaller packets leave more of the channel free for retries and other Wi-Fi.
+
+When to change it:
+
+* **To compare.** Set `distance = far` with `audio_compression = none`, then `high`, to hear what the compression does at the same radio rate.
+* **To save air time** on a busy channel, for example `distance = near` with `audio_compression = low`.
+* **Not** `none` at `distance = far` for long: uncompressed at 2 Mbit/s uses about 45 % of the channel, which was fragile in testing.
+
+`status.txt` and the log show the format in use, and name the setting when it isn't `auto`: `distance far (2 Mbit/s, mu-law audio, audio_compression low)`. Speaker mode always uses ADPCM, whatever this setting.
+
+## Which distance to choose
+
 The default is the furthest-reaching rate that comfortably fits the audio. If the link drops audio where Wi-Fi is busy (the stats lines or `report.html` show lost audio), try `near`; if the remote is simply too far away, try `far`.
 
 ## Antennas and placement

@@ -26,6 +26,7 @@ highpass = on        # on, off: remove rumble, wind and hum below highpass_hz (r
 highpass_hz = 200    # 50-1000: high-pass cut-off in Hz
 mic_level = 100      # 0-100: the adapter's microphone level, % of its range; adapter = leave it (AtomS3U: gain)
 distance = normal    # near, normal or far: radio rate and audio format of the link (both boards)
+audio_compression = auto  # auto, none, low or high: microphone audio format (both boards)
 mode = auto          # auto, microphone or speaker: which way the audio goes
 remote = any         # any, or the remote's MAC address: lock the pair to each other
 ```
@@ -35,13 +36,13 @@ remote = any         # any, or the remote's MAC address: lock the pair to each o
 | `mic`, `channel`, `remote` | [Pairing and several mics](pairing.md) |
 | `feedback` | [Voice feedback](voice-feedback.md) |
 | `noise_filter`, `noise_adapt`, `highpass`, `highpass_hz` | [Noise and high-pass filters](noise-filter.md) |
-| `distance`, `tx_power` | [Distance and range](distance.md) |
+| `distance`, `audio_compression`, `tx_power` | [Distance and range](distance.md) |
 | `mode` | [Speaker mode](speaker-mode.md) |
 | `cpu_mhz`, `mic_level` | below |
 
 **How changes reach the remote.**
 
-* **Most settings** (filters, adapt speed, transmit power, processor speed, mic level, distance, remote): the remote applies them at once and saves them, so it keeps them while the local board is off.
+* **Most settings** (filters, adapt speed, transmit power, processor speed, mic level, distance, audio compression, remote): the remote applies them at once and saves them, so it keeps them while the local board is off.
 * **Mic number and channel**: a *handover*. Both boards move together, and the local board never moves without the remote. See [Pairing](pairing.md#changing-the-mic-number-or-channel).
 * **Mode**: the remote saves it and restarts. If the audio direction changes, the local board restarts too, and the computer sees the new device. An [AtomS3U](atoms3u.md) remote is always a microphone.
 

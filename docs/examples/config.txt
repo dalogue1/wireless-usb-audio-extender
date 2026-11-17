@@ -1,10 +1,11 @@
-# USB Audio Extender settings
+# Wireless USB Audio Extender settings
 # Edit, save, then eject the EXTENDER drive: the local board restarts and
 # passes the remote's settings on over the radio. Delete this file to
 # return to the defaults.
 
 mic = 1               # 1-9: the PC sees "Extender Mic N" (both boards follow)
-channel = 11          # Wi-Fi channel 1-11 (both boards follow); pick a quiet one
+channel = 11          # Wi-Fi channel 1-11 (both boards follow); pick a quiet one.
+                       # More than one pair: give each pair its own channel (1, 6, 11)
 feedback = voice       # voice or off (announcements in the recording; for beeps, copy
                        # the beeps voice pack into the voice folder)
 noise_filter = on       # on (12 dB), strong (20 dB) or off (at the remote)
@@ -13,11 +14,14 @@ tx_power = max          # max, or 2-20 (dBm): radio transmit power of both board
 cpu_mhz = 240           # 240 or 160: processor speed of both boards (160 runs a little cooler)
 highpass = on           # on, off: remove rumble, wind and hum below highpass_hz (remote)
 highpass_hz = 200        # 50-1000: high-pass cut-off in Hz (200 keeps low owl and dove calls)
-mic_level = default     # default, or 0-100: the adapter's microphone level, % of its range
-                       # (default leaves the adapter's own level; status.txt shows it in dB;
-                       # in speaker mode it sets the adapter's speaker level)
+mic_level = 100         # 0-100: the adapter's microphone level, % of its range (default 100);
+                       # adapter = leave the adapter's own level. AtomS3U: the built-in mic's
+                       # gain, 0-100 = 0 to +30 dB. status.txt shows it in dB. In speaker
+                       # mode it sets the adapter's speaker level
 distance = normal       # near, normal or far: radio rate and audio format; far reaches furthest,
                        # near is uncompressed (see distance.md; both boards)
+audio_compression = auto   # auto, none, low or high: microphone audio. auto follows distance
+                       # (near none, normal low, far high); high = smallest, most loss
 mode = auto             # auto, microphone or speaker: which way the audio goes. auto decides
                        # when the remote starts: a mic signal = microphone, silence = speaker
                        # (with a microphone always connected, microphone is the safe choice)

@@ -109,10 +109,16 @@ static void configTests() {
                    "distance = 6\nmode = both\n", base);
     CHECK(r.errors == 6 && !r.settings.lock && r.settings.distance == 0 && r.settings.mode == 0, "bad MACs, distance and mode refused");
     CHECK(cfg::Settings().distance == 0 && cfg::Settings().mode == 0 && !cfg::Settings().lock, "defaults: normal, auto, any");
+    // 1.4.7: audio_compression
+    r = cfg::parse("audio_compression = HIGH\n", base);
+    CHECK(r.errors == 0 && r.settings.compression == 3, "audio_compression high");
+    r = cfg::parse("audio_compression = none\naudio_compression = adpcm\n", base);
+    CHECK(r.errors == 1 && r.settings.compression == 1, "audio_compression: unknown value refused, previous kept");
+    CHECK(cfg::Settings().compression == 0, "audio_compression default auto");
     char text[2600];
     cfg::Settings d;
     d.mic = 2; d.channel = 9; d.feedback = cfg::kFeedbackOff; d.filter = 1; d.adapt = 2; d.txPower = 11; d.cpuMhz = 160; d.highpass = 0; d.highpassHz = 1000;
-    d.distance = 2; d.mode = 1; d.lock = true;
+    d.distance = 2; d.compression = 2; d.mode = 1; d.lock = true;
     const uint8_t mac[6] = {0x44, 0xBD, 0x8D, 0x76, 0xCA, 0x44};
     memcpy(d.remoteMac, mac, 6);
     cfg::format(d, text, sizeof(text));

@@ -50,7 +50,7 @@
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.6-dev";
+static const char* kFirmware = "1.4.7-dev";
 
 // Time since start from the 64-bit microsecond timer: unlike millis() it does not wrap
 // after 49.7 days, so times in the logs, events.txt and status.txt stay right.
@@ -929,8 +929,8 @@ static void readConfig(uint8_t curPair, uint8_t curChannel) {
          config.mic, config.channel, cfg::feedbackName(config.feedback), cfg::filterName(config.filter),
          cfg::adaptName(config.adapt), hp, cfg::txPowerText(config.txPower), unsigned(config.cpuMhz),
          r.errors ? " | " : "", configProblem);
-    logf("config.txt: distance %s, mode %s, remote %s", cfg::distanceName(config.distance), cfg::modeName(config.mode),
-         cfg::remoteText(config));
+    logf("config.txt: distance %s, audio_compression %s, mode %s, remote %s", cfg::distanceName(config.distance),
+         cfg::compressionName(config.compression), cfg::modeName(config.mode), cfg::remoteText(config));
     char lv[12];
     cfg::levelText(config.micLevel, lv, sizeof(lv));
     logf("config.txt: mic level %s%s", lv, config.micLevel <= 100 ? " % of the adapter's range (AtomS3U: of its gain)" : " (the adapter's own)");
@@ -1111,7 +1111,7 @@ static void renderStatus(evlog::Out& f) {
     f.printf("  mode setting: %s%s\r\n", cfg::modeName(config.mode),
              config.mode == wlink::kModeAuto ? " (the remote decides when an adapter is plugged in)" : "");
     f.printf("  mic %u, channel %u, tx power %s dBm, distance %s (%s)\r\n", board::micNumber(pairId), channel,
-             cfg::txPowerText(config.txPower), wlink::distanceName(config.distance), wlink::distanceRateText(config.distance));
+             cfg::txPowerText(config.txPower), wlink::distanceName(config.distance), wlink::distanceRateText(config.distance, config.compression));
     if (config.lock)
         f.printf("  pairing: remote = %s: links only to that remote and locks it to this board\r\n", cfg::remoteText(config));
     else
@@ -1166,7 +1166,7 @@ static void renderStatus(evlog::Out& f) {
         s.name[sizeof(s.name) - 1] = 0;
         f.printf("  board: %s%s\r\n", wlink::boardName(s.board), s.board == wlink::kBoardAtomS3U ? " (built-in microphone)" : "");
         f.printf("  firmware %s, RSSI %d dBm, tx power %s dBm, distance %s (%s)\r\n", s.firmware, rssi,
-                 cfg::txPowerText(s.txPowerDbm), wlink::distanceName(s.distance), wlink::distanceRateText(s.distance));
+                 cfg::txPowerText(s.txPowerDbm), wlink::distanceName(s.distance), wlink::distanceRateText(s.distance, s.compression));
         f.printf("  mode: %s (%s)\r\n", s.audioMode == wlink::kModeSpeaker ? "speaker" : "microphone", modeReasonText(s.modeReason));
         if (s.rejected)
             f.printf("  WARNING: other local boards tried to link to it: %lu hellos refused, last from %s%s\r\n",
@@ -1577,6 +1577,7 @@ static void syncRemote() {
                remoteStatus.highpassHz != config.highpassHz ||
                remoteStatus.micLevel != config.micLevel ||
                remoteStatus.distance != config.distance || remoteStatus.modeSetting != config.mode ||
+               remoteStatus.compression != config.compression ||
                lockedHere != config.lock;
     }
     static uint32_t lastSent = 0;
@@ -1593,7 +1594,7 @@ static void syncRemote() {
     c.cpuMhz = config.cpuMhz;
     c.highpassOn = config.highpass;
     c.highpassHz = config.highpassHz;
-    c.reserved1 = 0;
+    c.compression = config.compression;
     c.micLevel = config.micLevel;
     c.distance = config.distance;
     c.modeSetting = config.mode;
@@ -1676,7 +1677,7 @@ void setup() {
     }
     USB.productName(name);
     USB.manufacturerName("Wireless USB Audio Extender");
-    USB.firmwareVersion(0x0146);
+    USB.firmwareVersion(0x0147);
     USB.onEvent(onUsbEvent);
     LogPort.setTxTimeoutMs(20);  // never stall when no terminal is open
     LogPort.onEvent(onSerialEvent);
@@ -1704,7 +1705,7 @@ void setup() {
     logf("Wireless USB Audio Extender local %s | %s | MAC %s", kFirmware, board::kindName(), board::macText(myMac).c_str());
     logf("local settings: %s %u | channel %u | %u MHz | distance %s (%s) | remote %s", speakerMode() ? "speaker" : "mic",
          board::micNumber(pairId), channel, unsigned(getCpuFrequencyMhz()), wlink::distanceName(config.distance),
-         wlink::distanceRateText(config.distance), cfg::remoteText(config));
+         wlink::distanceRateText(config.distance, config.compression), cfg::remoteText(config));
     logEvent("local chip temperature at start: %s", board::tempText(localTemp.now).c_str());
     if (!radioOk) logf("ERROR: ESP-NOW v2 start failed (needs Arduino-ESP32 core 3.2 or newer)");
     logf("started by: %s", board::resetReasonText());
