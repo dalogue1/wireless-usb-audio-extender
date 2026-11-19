@@ -14,7 +14,7 @@ Most people only need the [web flasher](https://dalogue1.github.io/wireless-usb-
 | `…-update.bin` | `0x10000` | updates: the program only; keeps all of those |
 | `…-boot.bin` | `0x0` | bootloader and partition table (stops before the settings at `0x9000`); the web flasher's Update writes it with the update image, so a board still starts if the flash was erased |
 
-With esptool: `esptool --chip esp32s3 write-flash 0x0 wireless-usb-audio-extender-local-1.4.7-dev-full.bin`. **Both boards must run the same version**: the radio protocol changes between versions.
+With esptool: `esptool --chip esp32s3 write-flash 0x0 wireless-usb-audio-extender-local-1.4.8-dev-full.bin`. **Both boards must run the same version**: the radio protocol changes between versions.
 
 The same two images run on the Seeed XIAO ESP32-S3 and the M5Stack [AtomS3U](atoms3u.md): at start-up each reads the chip's factory eFuses (the XIAO's ESP32-S3R8 has PSRAM in the package, the AtomS3U's ESP32-S3FN8 has flash there instead) and picks that board's LED, button and, on the remote, its microphone: a USB audio adapter on the XIAO, the built-in PDM microphone (read through the S3's hardware PDM-to-PCM filter) on the AtomS3U.
 
@@ -43,10 +43,10 @@ If a setting is wrong, the sketch stops at compile time with a message naming th
 ## Files
 
 ```
-AudioExtender_Remote/   remote: USB host -> high-pass + noise filter -> radio (microphone); radio -> USB host (speaker)
+AudioExtender_Remote/   remote: USB host -> high-pass, low-pass + noise filter -> radio (microphone); radio -> USB host (speaker)
 AudioExtender_Local/    local: radio -> jitter buffer -> USB microphone + announcements; USB speaker -> radio;
                         EXTENDER drive, config.txt, event log, reports (status, noise graph, report.html)
-shared/                 radio protocol, board helpers, high-pass filter, jitter buffer, adapter details
+shared/                 radio protocol, board helpers, high/low-pass filters, jitter buffer, adapter details
 usbmic/                 the USB audio host driver (also usable in other firmware: tools/export_usbmic.sh)
 flash/                  the web flasher page (GitHub Pages)
 docs/                   these pages; the noise filter's technical description and basis

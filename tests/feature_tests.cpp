@@ -115,9 +115,16 @@ static void configTests() {
     r = cfg::parse("audio_compression = none\naudio_compression = adpcm\n", base);
     CHECK(r.errors == 1 && r.settings.compression == 1, "audio_compression: unknown value refused, previous kept");
     CHECK(cfg::Settings().compression == 0, "audio_compression default auto");
+    // 1.4.8: lowpass
+    CHECK(cfg::Settings().lowpass == 0 && cfg::Settings().lowpassHz == 12000, "lowpass default off, 12000 Hz");
+    r = cfg::parse("lowpass = ON\nlowpass_hz = 10000\n", base);
+    CHECK(r.errors == 0 && r.settings.lowpass == 1 && r.settings.lowpassHz == 10000, "lowpass on, 10000 Hz");
+    r = cfg::parse("lowpass = maybe\nlowpass_hz = 1500\nlowpass_hz = 24000\n", base);
+    CHECK(r.errors == 3 && r.settings.lowpass == 0 && r.settings.lowpassHz == 12000, "bad lowpass values refused, defaults off / 12000 Hz");
     char text[2600];
     cfg::Settings d;
     d.mic = 2; d.channel = 9; d.feedback = cfg::kFeedbackOff; d.filter = 1; d.adapt = 2; d.txPower = 11; d.cpuMhz = 160; d.highpass = 0; d.highpassHz = 1000;
+    d.lowpass = 1; d.lowpassHz = 9000;
     d.distance = 2; d.compression = 2; d.mode = 1; d.lock = true;
     const uint8_t mac[6] = {0x44, 0xBD, 0x8D, 0x76, 0xCA, 0x44};
     memcpy(d.remoteMac, mac, 6);
@@ -129,10 +136,9 @@ static void configTests() {
     CHECK(r.settings == cfg::Settings(), "default file gives the defaults");
 }
 
-// Gain in dB of the high-pass filter for a sine of frequency f (48 kHz, after settling).
-static double hpGainDb(float cutoff, double f) {
-    hpf::Biquad h;
-    h.setHighPass(cutoff, 48000.0f);
+// Gain in dB of a filter for a sine of frequency f (48 kHz, after settling).
+template <class F>
+static double gainDb(F& h, double f) {
     const int n = 48000 * 2;
     std::vector<int16_t> x(n);
     for (int i = 0; i < n; ++i) x[i] = int16_t(lround(16000.0 * sin(2 * M_PI * f * i / 48000.0)));
@@ -144,6 +150,44 @@ static double hpGainDb(float cutoff, double f) {
         out += double(x[i]) * x[i];
     }
     return 10 * log10(out / in);
+}
+static double hpGainDb(float cutoff, double f) {
+    hpf::Biquad h;
+    h.setHighPass(cutoff, 48000.0f);
+    return gainDb(h, f);
+}
+
+static void lowpassTests() {
+    // 8th-order Butterworth low-pass, bilinear transform (frequencies pre-warped):
+    // |H|^2 = 1 / (1 + (tan(pi f/fs) / tan(pi fc/fs))^16). Steeper near 24 kHz than the analog
+    // filter. Far down, the int16 rounding between stages sets the floor: "at least" there.
+    struct { float fc; double f; } cases[] = {{12000, 1000}, {12000, 6000}, {12000, 10000}, {12000, 12000},
+                                             {12000, 14500}, {12000, 16000}, {4000, 2000}, {4000, 5000}};
+    for (auto c : cases) {
+        hpf::LowPass8 lp;
+        lp.set(c.fc, 48000.0f);
+        const double want = -10 * log10(1 + pow(tan(M_PI * c.f / 48000) / tan(M_PI * c.fc / 48000), 16));
+        const double got = gainDb(lp, c.f);
+        if (fabs(got - want) > 0.2) { printf("  low-pass %g Hz at %g Hz: %.2f dB, want %.2f\n", c.fc, c.f, got, want); failures++; }
+    }
+    hpf::LowPass8 lp;
+    lp.set(12000, 48000);
+    CHECK(gainDb(lp, 18000) < -50, "low-pass 12 kHz: more than 50 dB down at 18 kHz");
+    // The AtomS3U's notch at 48 kHz / 7: deep at the tone, about -3 dB at the edge, untouched further out.
+    const double tone = 48000.0 / 7;
+    hpf::Biquad n;
+    n.setNotch(float(tone), 48000.0f, 25.0f);
+    const double at = gainDb(n, tone);
+    n.reset();
+    const double edge = gainDb(n, tone + tone / 25 / 2);
+    n.reset();
+    const double away = gainDb(n, tone * 0.8);
+    n.reset();
+    const double above = gainDb(n, tone * 1.25);
+    if (at > -40 || edge > -2 || edge < -4 || away < -0.1 || above < -0.1) {
+        printf("  notch: %.1f dB at the tone, %.2f at the edge, %.2f / %.2f further out\n", at, edge, away, above);
+        failures++;
+    }
 }
 
 static void highpassTests() {
@@ -631,6 +675,7 @@ int main() {
     buttonTests();
     configTests();
     highpassTests();
+    lowpassTests();
     mixerTests();
     wavTests();
     clipTests();

@@ -8,6 +8,10 @@ The trade-off is shorter range (a small chip antenna instead of the XIAO's exter
 
 In a side-by-side test with BirdNET-Go, both mics outdoors at the same time, the AOM5024's background noise was about 19 dB lower than the AtomS3U's, without the AtomS3U's hiss above 12 kHz. BirdNET still identified faint Blue Jay calls through the AOM5024 (42–82 % confidence) that would have been buried in the AtomS3U's background noise.
 
+Since 1.4.8, `lowpass = on` in [`config.txt`](configuration.md) removes the AtomS3U's hiss above 12 kHz (see [the low-pass filter](noise-filter.md#the-low-pass-filter)). It can't lower the hiss below 12 kHz, which is the mic's own noise in the bird band.
+
+Sometimes the built-in mic also picks up a steady tone at 6857 Hz. That is exactly 48 kHz ÷ 7: the audio runs at 48,000 samples a second, and a tone at an exact fraction of that rate comes from the chip's own clocks, not from a sound outside (other mics at the same spot don't have it). Since 1.4.8 the remote removes it with a narrow notch filter, about 270 Hz wide, on the built-in mic only. It's always on and has no setting.
+
 **Start simple, upgrade later.** An AtomS3U remote can be replaced at any time by a XIAO ESP32-S3 remote with a USB audio adapter and a better microphone, and an AtomS3U local board by a XIAO local board. The firmware is the same, so with the default settings the new board just takes the old one's place. If you changed `mic` or `channel`, or locked the pair, see [Pairing](pairing.md).
 
 ## Two ways to use it

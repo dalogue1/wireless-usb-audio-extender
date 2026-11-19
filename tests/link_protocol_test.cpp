@@ -67,7 +67,7 @@ int main() {
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq), 4) == kInfoRequest);
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq) - 1, 4) == 0);
     // 1.3.6: the noise graph request and data; the version moved on (both boards must match).
-    static_assert(kVersion == 20, "protocol v20");
+    static_assert(kVersion == 21, "protocol v21");  // 1.4.8: low-pass in config, ack and status
     // 1.4.6: the remote's radio backlog of audio stays shorter than the local's 150 ms buffer,
     // and a weak signal (reports still coming) no longer counts as a stuck transmitter at once.
     static_assert(kMaxAudioQueued * 12 < 150, "audio backlog under the 150 ms buffer");

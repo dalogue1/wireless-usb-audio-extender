@@ -12,6 +12,7 @@ Source: `AudioExtender_Remote/NoiseSignature.h` (the engine, plain C++, no Ardui
 
 * The level meter and the no-signal check see the audio **as captured**, before the filter.
 * A **high-pass filter** (`shared/HighPass.h`: 2nd-order Butterworth, float, default on at 200 Hz) runs first, so the noise filter's reduction is not spent on rumble below the cut-off. Changing it is not a reason to relearn: the noise floor below the cut-off simply drops and the tracker follows within one tracker window.
+* A **low-pass filter** (1.4.8, `shared/HighPass.h` `LowPass8`: 8th-order Butterworth as four float biquads, 48 dB/octave, off by default) runs after the high-pass when `lowpass = on`.
 * The filter runs at 48 kHz, mono, 16-bit, the link's microphone format.
 
 ## Settings

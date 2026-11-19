@@ -50,7 +50,7 @@
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.7-dev";
+static const char* kFirmware = "1.4.8-dev";
 
 // Time since start from the 64-bit microsecond timer: unlike millis() it does not wrap
 // after 49.7 days, so times in the logs, events.txt and status.txt stay right.
@@ -669,6 +669,14 @@ static void reportRemoteChanges() {
         if (s.highpassOn) logEvent("remote high-pass filter: on, %u Hz", unsigned(s.highpassHz));
         else logEvent("remote high-pass filter: off");
     }
+    static uint32_t lastLowpass = 0xFFFFFFFF;  // on/off << 16 | cut-off (1.4.8)
+    const uint32_t lp = (uint32_t(s.lowpassOn) << 16) | s.lowpassHz;
+    if (lp != lastLowpass) {
+        const bool firstLp = lastLowpass == 0xFFFFFFFF;
+        lastLowpass = lp;
+        if (s.lowpassOn) logEvent("remote low-pass filter: on, %u Hz", unsigned(s.lowpassHz));
+        else if (!firstLp) logEvent("remote low-pass filter: off");
+    }
     static uint8_t lastNoSignal = 0;
     if (s.noSignal != lastNoSignal) {
         lastNoSignal = s.noSignal;
@@ -922,12 +930,14 @@ static void readConfig(uint8_t curPair, uint8_t curChannel) {
         snprintf(configProblem, sizeof(configProblem), "%d line(s) not understood (first: %s)", r.errors, r.firstError);
         evText(0, "config.txt: %s", configProblem);
     }
-    char hp[16];
+    char hp[16], lp[16];
     if (config.highpass) snprintf(hp, sizeof(hp), "%u Hz", unsigned(config.highpassHz));
     else strcpy(hp, "off");
-    logEvent("config.txt: mic %u, channel %u, feedback %s, noise filter %s, adapt %s, high-pass %s, tx power %s, cpu %u MHz%s%s",
+    if (config.lowpass) snprintf(lp, sizeof(lp), "%u Hz", unsigned(config.lowpassHz));
+    else strcpy(lp, "off");
+    logEvent("config.txt: mic %u, channel %u, feedback %s, noise filter %s, adapt %s, high-pass %s, low-pass %s, tx power %s, cpu %u MHz%s%s",
          config.mic, config.channel, cfg::feedbackName(config.feedback), cfg::filterName(config.filter),
-         cfg::adaptName(config.adapt), hp, cfg::txPowerText(config.txPower), unsigned(config.cpuMhz),
+         cfg::adaptName(config.adapt), hp, lp, cfg::txPowerText(config.txPower), unsigned(config.cpuMhz),
          r.errors ? " | " : "", configProblem);
     logf("config.txt: distance %s, audio_compression %s, mode %s, remote %s", cfg::distanceName(config.distance),
          cfg::compressionName(config.compression), cfg::modeName(config.mode), cfg::remoteText(config));
@@ -1184,7 +1194,7 @@ static void renderStatus(evlog::Out& f) {
         if (s.board == wlink::kBoardAtomS3U) f.printf("  microphone: %s %s\r\n", adapterText(s), s.name);
         else f.printf("  adapter: %s %s\r\n", adapterText(s), s.name);
         if (s.audioMode == wlink::kModeSpeaker) {
-            f.printf("  noise filter and high-pass: not used in speaker mode\r\n");
+            f.printf("  noise filter, high-pass and low-pass: not used in speaker mode\r\n");
             if (s.underrunsKnown)
                 f.printf("  playback: %lu audio packets lost on the way, %lu buffer underruns (since the remote started)\r\n",
                          (unsigned long)s.spkLost, (unsigned long)s.spkUnderruns);
@@ -1193,6 +1203,9 @@ static void renderStatus(evlog::Out& f) {
                      s.filterLearned ? "background noise learned" : "learning");
             if (s.highpassOn) f.printf("  high-pass filter: on, %u Hz\r\n", unsigned(s.highpassHz));
             else f.printf("  high-pass filter: off\r\n");
+            if (s.lowpassOn) f.printf("  low-pass filter: on, %u Hz\r\n", unsigned(s.lowpassHz));
+            else f.printf("  low-pass filter: off\r\n");
+            if (s.board == wlink::kBoardAtomS3U) f.printf("  built-in mic: notch at 6857 Hz (the chip's own tone)\r\n");
         }
         char lv[12];
         cfg::levelText(s.micLevel, lv, sizeof(lv));
@@ -1243,12 +1256,13 @@ static void renderNoiseSvg(noisesvg::Out& out) {
              atom ? "microphone" : "adapter", s.name[0] ? s.name : "?", eventLog.start(), evlog::Log::dur(upS()).s);
     cfg::levelText(s.micLevel, lv, sizeof(lv));
     if (s.hasLevel) snprintf(lvDb, sizeof(lvDb), atom ? " (gain %.1f dB)" : " (adapter at %.1f dB)", s.levelNow / 256.0);
-    char hp[24];
+    char hp[24], lp[32] = "";
     if (s.highpassOn) snprintf(hp, sizeof(hp), "on, %u Hz", unsigned(s.highpassHz));
     else snprintf(hp, sizeof(hp), "off");
-    snprintf(line2, sizeof(line2), "noise_filter %s | noise_adapt %s | highpass %s | mic_level %s%s%s",
+    if (s.lowpassOn) snprintf(lp, sizeof(lp), " | lowpass on, %u Hz", unsigned(s.lowpassHz));
+    snprintf(line2, sizeof(line2), "noise_filter %s | noise_adapt %s | highpass %s%s | mic_level %s%s%s",
              s.filterMode == wlink::kFilterStrong ? "strong (20 dB)" : s.filterMode == wlink::kFilterOff ? "off" : "on (12 dB)",
-             cfg::adaptName(s.adapt), hp, lv, s.micLevel <= 100 ? " %" : "", lvDb);
+             cfg::adaptName(s.adapt), hp, lp, lv, s.micLevel <= 100 ? " %" : "", lvDb);
     static int16_t bins[wlink::kNoiseBins];  // the packet is packed: copy to aligned values
     memcpy(bins, (const uint8_t*)&noise + offsetof(wlink::NoisePacket, deciDb), sizeof(bins));
     noisesvg::Info in;
@@ -1575,6 +1589,7 @@ static void syncRemote() {
                remoteStatus.adapt != config.adapt || remoteStatus.txPowerDbm != config.txPower ||
                remoteStatus.cpuMhz != config.cpuMhz || remoteStatus.highpassOn != config.highpass ||
                remoteStatus.highpassHz != config.highpassHz ||
+               remoteStatus.lowpassOn != config.lowpass || remoteStatus.lowpassHz != config.lowpassHz ||
                remoteStatus.micLevel != config.micLevel ||
                remoteStatus.distance != config.distance || remoteStatus.modeSetting != config.mode ||
                remoteStatus.compression != config.compression ||
@@ -1595,6 +1610,8 @@ static void syncRemote() {
     c.highpassOn = config.highpass;
     c.highpassHz = config.highpassHz;
     c.compression = config.compression;
+    c.lowpassOn = config.lowpass;
+    c.lowpassHz = config.lowpassHz;
     c.micLevel = config.micLevel;
     c.distance = config.distance;
     c.modeSetting = config.mode;

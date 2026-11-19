@@ -24,6 +24,7 @@ Remote: linked
   adapter: streaming KTMicro KT USB Audio
   noise filter: on (12 dB), adapt normal, background noise learned
   high-pass filter: on, 200 Hz
+  low-pass filter: off
   mic level: default -> adapter at 0.0 dB (its range -50.0 to 0.0 dB)
   adapter details: adapter.txt
   noise graph: noise.svg (also in report.html)

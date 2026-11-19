@@ -24,6 +24,8 @@ tx_power = max       # max, or 2-20 (dBm): radio transmit power of both boards
 cpu_mhz = 240        # 240 or 160: processor speed of both boards (160 runs a little cooler)
 highpass = on        # on, off: remove rumble, wind and hum below highpass_hz (remote)
 highpass_hz = 200    # 50-1000: high-pass cut-off in Hz
+lowpass = off        # on, off: remove hiss above lowpass_hz (remote)
+lowpass_hz = 12000   # 2000-20000: low-pass cut-off in Hz
 mic_level = 100      # 0-100: the adapter's microphone level, % of its range; adapter = leave it (AtomS3U: gain)
 distance = normal    # near, normal or far: radio rate and audio format of the link (both boards)
 audio_compression = auto  # auto, none, low or high: microphone audio format (both boards)
@@ -35,7 +37,7 @@ remote = any         # any, or the remote's MAC address: lock the pair to each o
 |---|---|
 | `mic`, `channel`, `remote` | [Pairing and several mics](pairing.md) |
 | `feedback` | [Voice feedback](voice-feedback.md) |
-| `noise_filter`, `noise_adapt`, `highpass`, `highpass_hz` | [Noise and high-pass filters](noise-filter.md) |
+| `noise_filter`, `noise_adapt`, `highpass`, `highpass_hz`, `lowpass`, `lowpass_hz` | [Noise, high-pass and low-pass filters](noise-filter.md) |
 | `distance`, `audio_compression`, `tx_power` | [Distance and range](distance.md) |
 | `mode` | [Speaker mode](speaker-mode.md) |
 | `cpu_mhz`, `mic_level` | below |

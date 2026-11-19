@@ -49,7 +49,7 @@
 #include "esp_timer.h"
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.7-dev";
+static const char* kFirmware = "1.4.8-dev";
 static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static board::StatusLed led;
@@ -91,6 +91,10 @@ static std::atomic<bool> noiseRequested{false};
 static std::atomic<bool> highpassOn{true};
 static std::atomic<uint16_t> highpassHz{hpf::kDefaultHz};
 static std::atomic<uint32_t> highpassVersion{1};
+// Low-pass filter (1.4.8): off by default, same hand-over as the high-pass.
+static std::atomic<bool> lowpassOn{false};
+static std::atomic<uint16_t> lowpassHz{hpf::kLowDefaultHz};
+static std::atomic<uint32_t> lowpassVersion{1};
 // Survives ESP.restart() (not a power cut): why the remote restarted itself.
 // What the radio looked like when the link was lost, and during the search. Kept in
 // RTC memory so it survives the remote's own restart and is reported after relinking.
@@ -471,6 +475,9 @@ static void audioTask(void*) {
     uint8_t appliedAdapt = 0xFF;
     hpf::Biquad highpass;
     uint32_t highpassApplied = 0;
+    hpf::LowPass8 lowpass;
+    uint32_t lowpassApplied = 0;
+    pdmmic::BoardTone boardTone;  // AtomS3U built-in mic only
     esp_task_wdt_add(nullptr);  // a stopped audio task restarts the board after 5 s
     for (;;) {
         esp_task_wdt_reset();
@@ -507,6 +514,9 @@ static void audioTask(void*) {
         for (int i = 0; i < wlink::kBlockSamples; ++i) block[i] = int16_t(raw[i] >> 16);
         notePeak(block);
         checkSignal(block);
+        // 1.4.8: the AtomS3U's built-in mic can carry a tone from the chip itself at 48 kHz / 7:
+        // a fixed notch removes it (BuiltInMic.h). USB adapters are not touched.
+        if (builtIn) boardTone.process(block, wlink::kBlockSamples);
         // High-pass before the noise filter, so its reduction is not spent on rumble.
         // The level meter and no-signal check above see the microphone as captured.
         if (const uint32_t v = highpassVersion.load(); v != highpassApplied) {
@@ -515,6 +525,13 @@ static void audioTask(void*) {
             highpass.reset();
         }
         if (highpassOn.load()) highpass.process(block, wlink::kBlockSamples);
+        // Low-pass (config.txt lowpass, off by default): hiss above the cut-off.
+        if (const uint32_t v = lowpassVersion.load(); v != lowpassApplied) {
+            lowpassApplied = v;
+            lowpass.set(float(lowpassHz.load()), float(wlink::kSampleRate));
+            lowpass.reset();
+        }
+        if (lowpassOn.load()) lowpass.process(block, wlink::kBlockSamples);
         if (noiseEngine) {
             const uint8_t mode = filterMode.load();
             const float wantFloor = mode == wlink::kFilterStrong ? -20.0f : -12.0f;
@@ -610,6 +627,8 @@ static void sendStatus() {
     p.adapterInfoId = adapterInfoId;
     p.distance = distance;
     p.compression = compression;
+    p.lowpassOn = lowpassOn.load();
+    p.lowpassHz = lowpassHz.load();
     p.audioMode = audioMode.load();
     p.modeSetting = modeSetting;
     p.modeReason = modeReason.load();
@@ -773,10 +792,11 @@ static void runButton() {
 // The settings in effect, for the "settings:" log lines (at start, and after a change).
 static String settingsText() {
     static const char* const kSet[] = {"auto", "microphone", "speaker"};
-    char b[200];
-    snprintf(b, sizeof(b), "mic %u | channel %u | %u MHz | high-pass %s | distance %s (%s) | mode %s",
+    char b[240];
+    snprintf(b, sizeof(b), "mic %u | channel %u | %u MHz | high-pass %s | low-pass %s | distance %s (%s) | mode %s",
              board::micNumber(pairId), channel, unsigned(getCpuFrequencyMhz()),
-             highpassOn.load() ? (String(highpassHz.load()) + " Hz").c_str() : "off", wlink::distanceName(distance),
+             highpassOn.load() ? (String(highpassHz.load()) + " Hz").c_str() : "off",
+             lowpassOn.load() ? (String(lowpassHz.load()) + " Hz").c_str() : "off", wlink::distanceName(distance),
              wlink::distanceRateText(distance, compression), builtIn ? "microphone (built-in mic)" : kSet[modeSetting]);
     return b;
 }
@@ -819,6 +839,16 @@ static void handleConfig() {
         settings.put("hp", hpOn ? 1 : 0);
         settings.put16("hpz", hpHz);
         logf("high-pass filter: %s, %u Hz (from the local board)", hpOn ? "on" : "off", unsigned(hpHz));
+    }
+    const bool lpOn = c.lowpassOn != 0;
+    const uint16_t lpHz = hpf::lowHzValid(c.lowpassHz) ? c.lowpassHz : hpf::kLowDefaultHz;
+    if (lpOn != lowpassOn.load() || lpHz != lowpassHz.load()) {
+        lowpassOn = lpOn;
+        lowpassHz = lpHz;
+        lowpassVersion++;
+        settings.put("lp", lpOn ? 1 : 0);
+        settings.put16("lpz", lpHz);
+        logf("low-pass filter: %s, %u Hz (from the local board)", lpOn ? "on" : "off", unsigned(lpHz));
     }
     const uint8_t lvl = wlink::levelValid(c.micLevel) ? c.micLevel : wlink::kLevelDefault;
     if (lvl != micLevel) {
@@ -906,6 +936,8 @@ static void handleConfig() {
     a.highpassOn = highpassOn.load();
     a.highpassHz = highpassHz.load();
     a.compression = compression;
+    a.lowpassOn = lowpassOn.load();
+    a.lowpassHz = lowpassHz.load();
     a.micLevel = micLevel;
     a.distance = distance;
     a.modeSetting = modeSetting;
@@ -1023,6 +1055,9 @@ void setup() {
     savedFilter = settings.get("opt", wlink::kFilterOn) <= wlink::kFilterOff ? settings.get("opt", 0) : wlink::kFilterOn;
     highpassOn = settings.get("hp", 1) != 0;
     highpassHz = hpf::hzValid(settings.get16("hpz", hpf::kDefaultHz)) ? settings.get16("hpz", hpf::kDefaultHz) : hpf::kDefaultHz;
+    lowpassOn = settings.get("lp", 0) != 0;
+    lowpassHz = hpf::lowHzValid(settings.get16("lpz", hpf::kLowDefaultHz)) ? settings.get16("lpz", hpf::kLowDefaultHz)
+                                                                          : hpf::kLowDefaultHz;
     micLevel = wlink::levelValid(settings.get("lvl", wlink::kLevelDefault)) ? settings.get("lvl", wlink::kLevelDefault)
                                                                             : wlink::kLevelDefault;
     distance = settings.get("dist", wlink::kDistanceNormal);

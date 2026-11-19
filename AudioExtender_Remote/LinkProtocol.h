@@ -20,7 +20,7 @@
 namespace wlink {
 
 constexpr uint32_t kMagic = 0x314D5557;  // "WUM1" little-endian
-constexpr uint8_t kVersion = 20; // 1.4.7: audio_compression setting (in config, ack and status); v19 = 1.4.5: microphone audio ADPCM at far, mu-law at normal (v18: ADPCM at far only); v17 = 1.4.4: temperature only at start and drive opening (no 10-min reads); v16 = 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
+constexpr uint8_t kVersion = 21; // 1.4.8: low-pass filter (in config, ack and status); v20 = 1.4.7: audio_compression setting (in config, ack and status); v19 = 1.4.5: microphone audio ADPCM at far, mu-law at normal (v18: ADPCM at far only); v17 = 1.4.4: temperature only at start and drive opening (no 10-min reads); v16 = 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
                                   // temperature + cpu_mhz; v6 = 1.2.4: tx_power; v5 = 1.2.3: mic 1..9;
                                   // v4 = 1.2.2: silent-mic status; v3 = 1.2.0: config.txt
 
@@ -281,6 +281,8 @@ struct __attribute__((packed)) StatusPacket {
     char problem[48];
     uint8_t board;          // BoardKind the remote runs on
     uint8_t compression;    // 1.4.7: Compression setting in effect (audio_compression)
+    uint8_t lowpassOn;      // 1.4.8: low-pass filter in effect
+    uint16_t lowpassHz;     // its cut-off
 };
 
 // Settings the local board wants the remote to use. newPairId/newChannel differ from
@@ -303,6 +305,8 @@ struct __attribute__((packed)) ConfigPacket {
     uint8_t distance;       // Distance: radio rate of the paired link
     uint8_t modeSetting;    // ModeSetting
     uint8_t lock;           // 1: lock the remote to this local board; 0: unlock (remote = any)
+    uint8_t lowpassOn;      // 1.4.8: low-pass filter on/off
+    uint16_t lowpassHz;     // its cut-off, 2000..20000 Hz
 };
 
 struct __attribute__((packed)) ConfigAckPacket {
@@ -320,6 +324,8 @@ struct __attribute__((packed)) ConfigAckPacket {
     uint8_t distance;             // in effect now
     uint8_t modeSetting;          // saved (a change restarts the remote)
     uint8_t locked;               // 1: locked to this local board now
+    uint8_t lowpassOn;            // 1.4.8: in effect now
+    uint16_t lowpassHz;           // in effect now
 };
 
 // The latest audio adapter's details (descriptors and what the remote made of them),

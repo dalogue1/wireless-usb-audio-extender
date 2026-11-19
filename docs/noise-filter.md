@@ -1,4 +1,4 @@
-# Noise filter and high-pass filter
+# Noise, high-pass and low-pass filters
 
 [← Back to the main page](../README.md)
 
@@ -8,6 +8,8 @@ The remote board cleans the microphone's sound before it goes over the radio, in
 2. An **adaptive noise filter** learns the steady background of your site (the microphone's own hiss, the adapter's preamp, distant traffic, air conditioning) and turns it down, band by band, while sounds that come and go, such as bird calls, pass through.
 
 Both are on by default and need no setting up. The result is a recording that sounds much cleaner, with quiet calls easier to hear.
+
+A **low-pass filter** for hiss above the bird band is also there, off by default (see [below](#the-low-pass-filter)).
 
 ## The noise filter
 
@@ -59,6 +61,14 @@ Before the noise filter, the remote removes sound below a cut-off frequency: win
 * Above the cut-off the sound is unchanged; below it, it falls away smoothly (12 dB less for every halving of the pitch: at 200 Hz, −12 dB at 100 Hz and −24 dB at 50 Hz).
 * Most songbirds sing at 1–8 kHz, far above any useful cut-off, but owls, doves, grouse and bitterns call as low as 150–600 Hz. A cut-off much above 200–300 Hz starts to trim them.
 
+## The low-pass filter
+
+The remote can also remove sound above a cut-off frequency: the high hiss of some microphones and adapters. The AtomS3U's built-in mic is the main example (its hiss rises sharply above about 14 kHz). It works on every remote, with a USB adapter or the AtomS3U's built-in mic.
+
+* **Off** is the default; `lowpass = on` turns it on, and `lowpass_hz` sets the cut-off (2000–20000 Hz, default 12000). Changes apply at once.
+* Below the cut-off the sound is unchanged; above it, it falls away steeply (48 dB less for every doubling of the pitch). At 12 kHz: −3 dB at 12 kHz, about −23 dB at 14.5 kHz, more than −50 dB from 18 kHz up.
+* 12 kHz keeps nearly all bird calls. A lower cut-off starts to trim the highest-pitched songs.
+
 ## Hearing the difference
 
 To hear what the filter does at your site, record a clip with `noise_filter = off` and run it through the same engine on a computer: `tools/noise_wav.cpp` ([how](noise-filter-technical.md#hearing-it-on-a-recording)) writes a filtered copy to compare with the original. Running BirdNET on both files is the real test of whether the filter helps detection at your site.
@@ -68,4 +78,4 @@ To hear what the filter does at your site, record a clip with `noise_filter = of
 * [How the filter works](noise-filter-technical.md): the processing step by step, its cost on the remote, and its tests.
 * [Technical basis](noise-filter-basis.md) ([PDF](noise-filter-basis.pdf)): the published methods it is built on (spectral subtraction, minimum statistics), with references.
 
-The level-meter LED and the no-signal check see the microphone as captured, before both filters.
+The level-meter LED and the no-signal check see the microphone as captured, before the filters.

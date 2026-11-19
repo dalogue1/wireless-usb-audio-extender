@@ -9,12 +9,16 @@
 // esp32-birdnet-mic project) brings the capsule up to a usable level.
 // read() hands out left-aligned int32 samples, like usbmic::read(), so the audio path is the
 // same for both boards.
+// 1.4.8: the mic can pick up a tone from the chip itself at exactly 48 kHz / 7 = 6857.14 Hz
+// (strong at cpu_mhz 160, and at times at 240; other mics at the same spot don't have it).
+// BoardTone removes it with a narrow notch.
 #include <Arduino.h>
 #include <atomic>
 #include <math.h>
 #include <driver/i2s_pdm.h>
 #include "BoardCommon.h"
 #include "LinkProtocol.h"
+#include "HighPass.h"
 
 namespace pdmmic {
 
@@ -94,5 +98,18 @@ inline size_t read(int32_t* out, size_t maxSamples, uint32_t timeoutMs) {
     }
     return frames;
 }
+
+// Notch for the chip's own tone (applied by the audio task, built-in mic only).
+// Q 25: -3 dB points about 270 Hz apart; the rest of the band is untouched.
+constexpr float kBoardToneHz = float(wlink::kSampleRate) / 7.0f;
+constexpr float kBoardToneQ = 25.0f;
+class BoardTone {
+public:
+    BoardTone() { n_.setNotch(kBoardToneHz, float(wlink::kSampleRate), kBoardToneQ); }
+    void process(int16_t* x, size_t n) { n_.process(x, n); }
+
+private:
+    hpf::Biquad n_;
+};
 
 }  // namespace pdmmic
