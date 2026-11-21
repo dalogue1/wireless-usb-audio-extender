@@ -33,9 +33,9 @@ It is not a USB device: there is no USB chip and no USB protocol. The plug's fou
 | R1 | 0 Ω (or 33–100 Ω) | 0805, back | in the DATA line. **Must be fitted**: without it the mic isn't connected. 0 Ω: Yageo RC0805JR-070RL, DigiKey [311-0.0ARCT-ND](https://www.digikey.com/en/products/detail/yageo/RC0805JR-070RL/728216) |
 | R2 | 0 Ω (or 33–100 Ω) | 0805, back | in the CLK line. **Must be fitted**. 0 Ω: same as R1 |
 | JP1 | solder jumper (no part) | back | channel: L as made, or R |
-| U2 | IM73D122 mic module, 15.5 mm round ([Amazon](https://www.amazon.com/dp/B0HK84XMMY)) | 2 × 3 pins on 2.5 mm headers, top | mic port facing up |
+| U2 | IM73D122 mic module, 15.5 mm round ([Amazon](https://www.amazon.com/dp/B0HK84XMMY), [AliExpress](https://www.aliexpress.com/w/wholesale-im73d122.html)) | 2 × 3 pins on 2.5 mm headers, top | mic port facing up |
 
-The parts were chosen to make hand soldering easier: the capacitors and resistors are 0805 size, the 3.3 V regulator is in a SOT-89 package, larger than the common SOT-23, and the microphone is a ready-made IM73D122 module ([Amazon](https://www.amazon.com/dp/B0HK84XMMY), for reference) with through-hole pins, instead of the bare IM73D122, whose tiny pads underneath can't be soldered with an iron.
+The parts were chosen to make hand soldering easier: the capacitors and resistors are 0805 size, the 3.3 V regulator is in a SOT-89 package, larger than the common SOT-23, and the microphone is a ready-made IM73D122 module ([Amazon](https://www.amazon.com/dp/B0HK84XMMY), [AliExpress](https://www.aliexpress.com/w/wholesale-im73d122.html), for reference; on AliExpress pick the round 15.5 mm module with 6 pins, 2 × 3 at 2.0 mm) with through-hole pins, instead of the bare IM73D122, whose tiny pads underneath can't be soldered with an iron.
 
 Use 0 Ω for R1 and R2 unless a long USB extension gives clicks or noise bursts; then try 33–100 Ω.
 
