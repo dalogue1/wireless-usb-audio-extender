@@ -12,9 +12,10 @@
 //      which would sit on the DATA line, is turned off), the PDM clock is started on GPIO19
 //      and GPIO20 is watched: a microphone answers with a bit stream (roughly half ones,
 //      changing all the time); an empty socket stays low.
-//   3. A PDM microphone on the board itself: the XIAO ESP32-S3 Sense's built-in microphone
-//      (clock GPIO42, data GPIO41), then one wired to D3 = clock / D2 = data (the
-//      esp32-birdnet-mic wiring). Checked the same way.
+//   3. A PDM microphone wired to D3 = clock / D2 = data (the esp32-birdnet-mic wiring), then
+//      the XIAO ESP32-S3 Sense's built-in microphone (clock GPIO42, data GPIO41). Checked the
+//      same way. D2/D3 first: a mic wired to a Sense board is there on purpose, and wins
+//      over the Sense's own.
 //   4. None of these: the USB host starts and waits for an audio adapter (as before 1.4.9),
 //      so an adapter plugged in later still works.
 // While a PDM microphone is used the USB host never starts: the remote's USB-C port is then
@@ -158,19 +159,19 @@ inline Result detect() {
         return r;
     }
     restoreUsbPads();
-    const bool sense = probePdm(pins(wlink::kSrcSensePdm), r.activity);
-    r.checked[1] = r.activity;
-    if (sense) {
-        r.source = wlink::kSrcSensePdm;
-        snprintf(r.text, sizeof(r.text), "XIAO ESP32-S3 Sense built-in microphone (clock GPIO42, data GPIO41; %u %% ones)",
-                 r.activity.onesPct());
-        return r;
-    }
     const bool wired = probePdm(pins(wlink::kSrcPinPdm), r.activity);
     r.checked[2] = r.activity;
     if (wired) {
         r.source = wlink::kSrcPinPdm;
         snprintf(r.text, sizeof(r.text), "PDM microphone on D3/D2 (clock D3 = GPIO4, data D2 = GPIO3; %u %% ones)",
+                 r.activity.onesPct());
+        return r;
+    }
+    const bool sense = probePdm(pins(wlink::kSrcSensePdm), r.activity);
+    r.checked[1] = r.activity;
+    if (sense) {
+        r.source = wlink::kSrcSensePdm;
+        snprintf(r.text, sizeof(r.text), "XIAO ESP32-S3 Sense built-in microphone (clock GPIO42, data GPIO41; %u %% ones)",
                  r.activity.onesPct());
         return r;
     }

@@ -11,7 +11,7 @@ Everything after the microphone stays the same: the radio link, the local board,
 | Type | What it is | Soldering |
 |---|---|---|
 | **External PDM Microphone** | A small board with an IM73D122 mic and a USB-A plug. It plugs into the OTG adapter in place of the USB audio adapter. | Assemble the board once (or get one ready-made) |
-| **XIAO Sense built-in microphone** | The mic on the XIAO ESP32-S3 Sense's camera board (MSM261D3526H1CPM) | None: use a XIAO ESP32-S3 **Sense** as the remote |
+| **XIAO Sense built-in microphone** | The mic on the XIAO ESP32-S3 Sense's camera board (MSM261D3526H1CPM, SNR 64 dB(A)) | None: use a XIAO ESP32-S3 **Sense** as the remote |
 | **A PDM mic on D2/D3** | Any 3.3 V PDM mic module wired to the XIAO: clock to **D3**, data to **D2**, plus 3V3 and GND | Yes |
 | AtomS3U built-in microphone | See [AtomS3U boards](atoms3u.md) | None |
 
@@ -25,7 +25,7 @@ How to make the board, the parts and how to order it: **[The External PDM Microp
 
 ### XIAO Sense built-in microphone
 
-The XIAO ESP32-S3 Sense is the same board as the XIAO ESP32-S3 with a camera and microphone board clipped on. Used as the remote with nothing in its OTG adapter, it uses that microphone. The camera is not used. It is the quickest PDM option, but the mic sits on the board itself, next to the radio and in whatever case you use.
+The XIAO ESP32-S3 Sense is the same board as the XIAO ESP32-S3 with a camera and microphone board clipped on. Used as the remote with nothing in its OTG adapter, it uses that microphone. The camera is not used. It is the quickest PDM option, but the mic sits on the board itself, next to the radio and in whatever case you use, and it is a noisier mic: its signal-to-noise ratio is 64 dB(A), against 73 dB for the IM73D122 on the External PDM Microphone and 80 dB for the AOM5024 in the main build.
 
 ### A PDM mic on D2/D3
 
@@ -37,8 +37,8 @@ There is no setting. When the remote starts, it checks in this order and uses th
 
 1. **A USB audio adapter** in the OTG adapter (as before 1.4.9).
 2. **The External PDM Microphone** in the OTG adapter.
-3. **The XIAO Sense's built-in microphone.**
-4. **A PDM mic on D2/D3.**
+3. **A PDM mic on D2/D3.** This comes before the Sense's own mic, so a mic wired to a Sense board is the one used.
+4. **The XIAO Sense's built-in microphone.**
 5. **None of these:** the remote waits for a USB audio adapter to be plugged in, as before.
 
 The remote chooses only when it starts. To change from one kind of mic to another, plug in the new one and restart the remote (unplug its power). A USB audio adapter always wins, so a Sense board or a wired mic doesn't get in the way of one.

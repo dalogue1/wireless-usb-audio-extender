@@ -5,8 +5,9 @@ Wireless USB Audio Extender 1.4.9-dev  (radio protocol v22: update both boards)
   2. else the External PDM Microphone board (IM73D122) in the OTG adapter's USB-A socket:
      PDM clock on USB D- (GPIO19, weakest drive), data on USB D+ (GPIO20); the USB-Serial-JTAG
      pad and its D+ pull-up are released first, and the USB host is never started;
-  3. else the XIAO ESP32-S3 Sense's built-in microphone (clock GPIO42, data GPIO41);
-  4. else a PDM microphone wired to D3 (clock, GPIO4) / D2 (data, GPIO3);
+  3. else a PDM microphone wired to D3 (clock, GPIO4) / D2 (data, GPIO3), checked before
+     the Sense so a mic wired to a Sense board wins;
+  4. else the XIAO ESP32-S3 Sense's built-in microphone (clock GPIO42, data GPIO41);
   5. else the USB host starts and waits for an adapter (as before).
   Decided once per start: to change microphones, restart the remote. A PDM microphone is
   microphone mode only (mode reason "remote uses a PDM microphone"). The remote's log says what
