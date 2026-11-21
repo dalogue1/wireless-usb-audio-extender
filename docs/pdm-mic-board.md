@@ -35,6 +35,8 @@ It is not a USB device: there is no USB chip and no USB protocol. The plug's fou
 | JP1 | solder jumper (no part) | back | channel: L as made, or R |
 | U2 | IM73D122 mic module, 15.5 mm round | 2 × 3 pins on 2.5 mm headers, top | mic port facing up |
 
+The parts were chosen to make hand soldering easier: the capacitors and resistors are 0805 size, and the 3.3 V regulator is in a SOT-89 package, larger than the common SOT-23.
+
 Use 0 Ω for R1 and R2 unless a long USB extension gives clicks or noise bursts; then try 33–100 Ω.
 
 ## Assembly
