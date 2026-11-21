@@ -5,7 +5,7 @@
 //   rumble, traffic, HVAC and mains hum below the cut-off before the noise filter.
 // - Low-pass (1.4.8): 8th-order Butterworth, four biquads (48 dB/octave, -3 dB at the
 //   cut-off). Removes hiss above the cut-off (config.txt lowpass / lowpass_hz).
-// - Notch (1.4.8): removes one narrow tone (the AtomS3U's built-in mic, BuiltInMic.h).
+// - Notch (1.4.8): removes one narrow tone (the AtomS3U's built-in mic, PdmMic.h).
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>

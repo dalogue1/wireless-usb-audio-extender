@@ -2,7 +2,10 @@
 //
 // One firmware for two boards (board::kind(), from the chip's eFuses):
 //   Seeed XIAO ESP32-S3: a USB audio adapter on its USB-C port (below), microphone or speaker.
-//   M5Stack AtomS3U: its built-in PDM microphone (BuiltInMic.h), microphone only; the USB
+//     1.4.9: or a PDM microphone, found at start-up (MicDetect.h): the External PDM
+//     Microphone board in the OTG adapter's USB-A socket, the XIAO Sense's built-in
+//     microphone, or one wired to D3/D2. Microphone only; the USB host is then never started.
+//   M5Stack AtomS3U: its built-in PDM microphone (PdmMic.h), microphone only; the USB
 //   host is never started (its USB-A plug only takes power).
 //
 // Microphone mode: captures from a USB Audio Class 1 adapter (e.g. UGREEN 30757 +
@@ -43,19 +46,24 @@
 #include "JitterBuffer.h"
 #include "Adpcm.h"
 #include "ModeDecision.h"
-#include "BuiltInMic.h"
+#include "PdmMic.h"
+#include "MicDetect.h"
 #include "esp_heap_caps.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.8-dev";
+static const char* kFirmware = "1.4.9-dev";
 static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static board::StatusLed led;
-static bool builtIn = false;  // AtomS3U: built-in microphone instead of a USB adapter (set in setup())
+// Where the audio comes from (set once in setup()): a USB adapter, or a PDM microphone
+// (AtomS3U built-in; XIAO: External PDM Microphone, Sense built-in or D3/D2, see MicDetect.h).
+static uint8_t micSource = wlink::kSrcUsbAdapter;
+static bool pdm() { return wlink::pdmSource(micSource); }  // a PDM microphone: no USB host, microphone only
+static const char* micName() { return wlink::micSourceName(micSource); }
 // The microphone in use is delivering audio.
-static bool micLive() { return builtIn ? pdmmic::running() : usbmic::streaming(); }
+static bool micLive() { return pdm() ? pdmmic::running() : usbmic::streaming(); }
 static uint8_t pairId = 0;
 static uint8_t channel = 1;
 
@@ -168,16 +176,24 @@ static std::atomic<int8_t> noSignalChange{0};       // +1 began, -1 ended (for l
 static std::atomic<bool> heardNonZero{false};
 static std::atomic<uint32_t> captureSinceMs{0};  // capture stream (re)started at (0: not streaming)
 
+// 1.4.9: a PDM microphone that stops (board unplugged) leaves its data line held low: the
+// samples then stand still at one value (the hardware filter's output for an all-zero bit
+// stream, often clipped by the gain), not at zero. So for PDM any movement at all counts as a
+// signal: a working microphone's own hiss always moves, even at mic_level 0.
 static void checkSignal(const int16_t* pcm) {
     static uint32_t quietSince = 0;
     uint16_t peak = 0;
+    int lo = 32767, hi = -32768;
     for (int i = 0; i < wlink::kBlockSamples; ++i) {
         const int v = pcm[i] < 0 ? -int(pcm[i]) : pcm[i];
         if (v > peak) peak = uint16_t(v > 32767 ? 32767 : v);
+        if (pcm[i] < lo) lo = pcm[i];
+        if (pcm[i] > hi) hi = pcm[i];
     }
     const uint32_t now = millis();
     if (peak && !heardNonZero.load()) heardNonZero = true;
-    if (peak > kSilentPeak) {
+    const bool heard = pdm() ? hi > lo : peak > kSilentPeak;
+    if (heard) {
         quietSince = 0;
         if (noSignal.exchange(false)) noSignalChange = -1;
         return;
@@ -273,7 +289,7 @@ static int forwardIdfLog(const char* fmt, va_list ap) {
 
 // Every 10 s while no audio adapter streams: what the USB host can see.
 static void reportUsbHost() {
-    if (builtIn) return;
+    if (pdm()) return;
     static uint32_t last = 0;
     if (millis() - last < 10000) return;
     last = millis();
@@ -478,6 +494,7 @@ static void audioTask(void*) {
     hpf::LowPass8 lowpass;
     uint32_t lowpassApplied = 0;
     pdmmic::BoardTone boardTone;  // AtomS3U built-in mic only
+    const bool atomMic = micSource == wlink::kSrcAtomMic;
     esp_task_wdt_add(nullptr);  // a stopped audio task restarts the board after 5 s
     for (;;) {
         esp_task_wdt_reset();
@@ -506,7 +523,7 @@ static void audioTask(void*) {
             const uint32_t t = millis();
             captureSinceMs = t ? t : 1;
         }
-        have += builtIn ? pdmmic::read(raw + have, wlink::kBlockSamples - have, 20)
+        have += pdm() ? pdmmic::read(raw + have, wlink::kBlockSamples - have, 20)
                         : usbmic::read(raw + have, wlink::kBlockSamples - have, 20);
         if (have < wlink::kBlockSamples) continue;
         have = 0;
@@ -515,8 +532,8 @@ static void audioTask(void*) {
         notePeak(block);
         checkSignal(block);
         // 1.4.8: the AtomS3U's built-in mic can carry a tone from the chip itself at 48 kHz / 7:
-        // a fixed notch removes it (BuiltInMic.h). USB adapters are not touched.
-        if (builtIn) boardTone.process(block, wlink::kBlockSamples);
+        // a fixed notch removes it (PdmMic.h). USB adapters are not touched.
+        if (atomMic) boardTone.process(block, wlink::kBlockSamples);
         // High-pass before the noise filter, so its reduction is not spent on rumble.
         // The level meter and no-signal check above see the microphone as captured.
         if (const uint32_t v = highpassVersion.load(); v != highpassApplied) {
@@ -560,7 +577,7 @@ static void audioTask(void*) {
 
 // ---------------------------------------------------------------- status
 static uint8_t adapterState(const usbmic::Status& s) {
-    if (builtIn) return pdmmic::running() ? wlink::kAdapterStreaming : wlink::kAdapterUnusable;
+    if (pdm()) return pdmmic::running() ? wlink::kAdapterStreaming : wlink::kAdapterUnusable;
     if (s.streaming) return wlink::kAdapterStreaming;
     if (s.connected && s.problem[0]) return wlink::kAdapterUnusable;  // plugged in, refused
     return wlink::kAdapterNone;
@@ -587,12 +604,17 @@ static void sendStatus() {
     strlcpy(p.name, s.name, sizeof(p.name));
     strlcpy(p.problem, s.problem, sizeof(p.problem));
     p.board = uint8_t(board::kind());
-    if (builtIn) {
+    p.micSource = micSource;
+    p.micSlot = wlink::kSlotUnknown;
+    if (pdm()) {
         p.vid = p.pid = 0;
         p.channels = 1;
         p.bits = 16;
-        strlcpy(p.name, "built-in microphone (SPM1423)", sizeof(p.name));
-        strlcpy(p.problem, pdmmic::running() ? "" : "built-in microphone did not start", sizeof(p.problem));
+        p.usbPackets = p.usbBadPackets = p.usbOverflows = 0;
+        strlcpy(p.name, micSource == wlink::kSrcAtomMic ? "built-in microphone (SPM1423)" : micName(), sizeof(p.name));
+        if (pdmmic::running()) p.problem[0] = 0;
+        else snprintf(p.problem, sizeof(p.problem), "%s did not start", micSource == wlink::kSrcAtomMic ? "built-in microphone" : micName());
+        if (pdmmic::slotDecided()) p.micSlot = uint8_t(pdmmic::slotInUse());
     }
     p.filterMode = filterMode.load();
     p.filterLearned = filterLearned.load() ? 1 : 0;
@@ -606,7 +628,7 @@ static void sendStatus() {
     p.highpassHz = highpassHz.load();
     p.tempFresh = tempSnapshotMs ? 1 : 0;
     p.micLevel = micLevel;
-    if (builtIn) {  // digital gain, 0..+30 dB
+    if (pdm()) {  // digital gain, 0..+30 dB
         p.hasLevel = 1;
         p.levelMin = 0;
         p.levelMax = int16_t(pdmmic::kMaxGainDb * 256);
@@ -649,7 +671,7 @@ static void sendStatus() {
 // Builds a new adapter record when a different adapter (or the same one again) has been
 // opened and its outcome is known (streaming, or refused). Unplugging keeps the last one.
 static void updateAdapterRecord() {
-    if (builtIn) return;  // no USB adapter: status.txt describes the built-in microphone
+    if (pdm()) return;  // no USB adapter: status.txt and adapter.txt describe the PDM microphone
     static uint32_t lastConnects = 0;
     static uint8_t lastState = 0;
     static char lastProblem[sizeof(usbmic::Status::problem)] = "";
@@ -797,7 +819,7 @@ static String settingsText() {
              board::micNumber(pairId), channel, unsigned(getCpuFrequencyMhz()),
              highpassOn.load() ? (String(highpassHz.load()) + " Hz").c_str() : "off",
              lowpassOn.load() ? (String(lowpassHz.load()) + " Hz").c_str() : "off", wlink::distanceName(distance),
-             wlink::distanceRateText(distance, compression), builtIn ? "microphone (built-in mic)" : kSet[modeSetting]);
+             wlink::distanceRateText(distance, compression), pdm() ? "microphone (PDM mic)" : kSet[modeSetting]);
     return b;
 }
 
@@ -854,10 +876,11 @@ static void handleConfig() {
     if (lvl != micLevel) {
         micLevel = lvl;
         settings.put("lvl", lvl);
-        if (builtIn) {
+        if (pdm()) {
             pdmmic::setLevel(lvl);
-            logf("mic level: %s, gain %.1f dB (built-in microphone, from the local board)",
-                 lvl == wlink::kLevelDefault ? "default" : (String(lvl) + " %").c_str(), pdmmic::gainDb256().load() / 256.0f);
+            logf("mic level: %s, gain %.1f dB (%s, from the local board)",
+                 lvl == wlink::kLevelDefault ? "default" : (String(lvl) + " %").c_str(), pdmmic::gainDb256().load() / 256.0f,
+                 micName());
         } else {
             usbmic::setVolume(lvl);  // applied now if an adapter streams, else when one is plugged in
             if (lvl == wlink::kLevelDefault) logf("mic level: default (the adapter's own; it keeps the last level until unplugged)");
@@ -897,8 +920,8 @@ static void handleConfig() {
     if (mset != modeSetting) {
         static const char* const kSet[] = {"auto", "microphone", "speaker"};
         settings.put("mode", mset);
-        if (builtIn) {
-            logf("mode setting: %s; stays microphone (remote has built-in mic only)", kSet[mset]);
+        if (pdm()) {
+            logf("mode setting: %s; stays microphone (the remote uses the %s)", kSet[mset], micName());
         } else {
             logf("mode: %s -> %s (from the local board)", kSet[modeSetting], kSet[mset]);
             modeRestart = true;
@@ -961,11 +984,13 @@ static void handleConfig() {
 // plug-in, never mid-run). The USB host opens the adapter's matching side.
 static modesel::State modeState;
 static void decideMode() {
-    if (builtIn) {  // AtomS3U: always a microphone, whatever config.txt says
-        if (modeReason.load() != wlink::kReasonBuiltInMic) {
+    if (pdm()) {  // AtomS3U, or a XIAO with a PDM microphone: always a microphone, whatever config.txt says
+        const uint8_t why = micSource == wlink::kSrcAtomMic ? wlink::kReasonBuiltInMic : wlink::kReasonPdmMic;
+        if (modeReason.load() != why) {
             audioMode = wlink::kModeMicrophone;
-            modeReason = wlink::kReasonBuiltInMic;
-            logf("mode: microphone (remote has built-in mic only)");
+            modeReason = why;
+            if (why == wlink::kReasonBuiltInMic) logf("mode: microphone (remote has built-in mic only)");
+            else logf("mode: microphone (the remote uses the %s)", micName());
         }
         return;
     }
@@ -1044,7 +1069,7 @@ static void sendNoise() {
 // ---------------------------------------------------------------- setup / loop
 void setup() {
     Serial0.begin(115200);
-    builtIn = board::atomS3U();
+    if (board::atomS3U()) micSource = wlink::kSrcAtomMic;
     led.begin();
     pinMode(board::buttonPin(), INPUT_PULLUP);
     settings.begin();
@@ -1072,6 +1097,12 @@ void setup() {
     led.blinkMicNumber(board::micNumber(pairId));
     logQueue = xQueueCreate(24, sizeof(LogText));
     idfVprintf = esp_log_set_vprintf(forwardIdfLog);
+    // 1.4.9: the XIAO's microphone, decided now, before the USB host would take the USB pins.
+    micdetect::Result found;
+    if (!board::atomS3U()) {
+        found = micdetect::detect();
+        micSource = found.source;
+    }
 
     chipTemp = board::readChipTempOnce();  // before the radio starts: no pause needed
     const bool radioOk = board::startRadio(channel, onRecv, onSent);
@@ -1107,18 +1138,23 @@ void setup() {
     static_assert(wlink::kLevelDefault == usbmic::kVolumeDeviceDefault, "same 'leave it' value");
     // Mode: a setting is final at once; auto opens the adapter's microphone side first and
     // decides when it is plugged in (decideMode()).
-    if (builtIn) {
+    if (pdm()) {
         audioMode = wlink::kModeMicrophone;  // decideMode() reports it
     } else if (modeSetting != wlink::kModeAuto) {  // final at once (decideMode() logs it)
         modeState.mode = modeSetting == wlink::kModeSetSpeaker ? wlink::kModeSpeaker : wlink::kModeMicrophone;
         audioMode = modeState.mode;
     }
-    if (builtIn) {
-        if (pdmmic::start(micLevel))
-            logf("built-in microphone: 48 kHz, gain %.1f dB (mic_level %s)", pdmmic::gainDb256().load() / 256.0f,
+    if (!board::atomS3U()) logf("microphone: %s", found.text);
+    if (pdm()) {
+        const char* what = micSource == wlink::kSrcAtomMic ? "built-in microphone" : micName();
+        if (pdmmic::start(micLevel, micdetect::pins(micSource)))
+            logf("%s: 48 kHz, gain %.1f dB (mic_level %s)", what, pdmmic::gainDb256().load() / 256.0f,
                  micLevel == wlink::kLevelDefault ? "default" : (String(micLevel) + " %").c_str());
         else
-            logf("ERROR: the built-in microphone did not start");
+            logf("ERROR: the %s did not start", what);
+        if (micSource != wlink::kSrcAtomMic)
+            logf("USB host not started (PDM microphone in use): to use a USB audio adapter instead, plug it in and "
+                 "restart the remote");
     } else {
         usbmic::setPlaybackSource(playbackFill);
         if (!usbmic::start(micLevel, speaker() ? usbmic::Direction::Playback : usbmic::Direction::Capture))
@@ -1233,17 +1269,22 @@ void loop() {
     static uint32_t beaconFailRun = 0;  // beacons in a row the radio refused to send
     static uint32_t linkedSinceMs = 0;
 
-    if (!builtIn) usbmic::pollLog(logLineFromUsb);
+    if (!pdm()) usbmic::pollLog(logLineFromUsb);
     static bool slotLogged = false;
-    if (builtIn && !slotLogged && pdmmic::slotDecided()) {
+    if (pdm() && !slotLogged && pdmmic::slotDecided()) {
         slotLogged = true;
-        logf("built-in microphone: signal on PDM slot %s", pdmmic::slotInUse() ? "right" : "left");
+        logf("%s: signal on PDM slot %s", micSource == wlink::kSrcAtomMic ? "built-in microphone" : micName(),
+             pdmmic::slotInUse() ? "right" : "left");
     }
     reportUsbHost();
     runButton();
     handleConfig();
     if (const int8_t c = noSignalChange.exchange(0)) {
-        if (c > 0) logf("adapter is sending silence: no microphone signal for 20 s - check the microphone is in the "
+        if (c > 0 && pdm())
+            logf("no microphone signal for 20 s from the %s - %s", micName(),
+                 micSource == wlink::kSrcExternalPdm ? "check the board is still in the OTG adapter (after re-plugging it, "
+                                                       "restart the remote)" : "check the microphone");
+        else if (c > 0) logf("adapter is sending silence: no microphone signal for 20 s - check the microphone is in the "
                         "adapter's MIC jack and the plug type matches (a 4-pole TRRS plug in a 3-pole TRS mic jack is silent)");
         else logf("microphone signal is back");
     }

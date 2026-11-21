@@ -50,7 +50,7 @@
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 
-static const char* kFirmware = "1.4.8-dev";
+static const char* kFirmware = "1.4.9-dev";
 
 // Time since start from the 64-bit microsecond timer: unlike millis() it does not wrap
 // after 49.7 days, so times in the logs, events.txt and status.txt stay right.
@@ -609,6 +609,13 @@ static const char* adapterText(const wlink::StatusPacket& s) {
     }
 }
 
+// 1.4.9: the remote uses a PDM microphone (AtomS3U built-in, External PDM Microphone, XIAO
+// Sense built-in, or one on D2/D3), not a USB audio adapter.
+static bool pdmRemote(const wlink::StatusPacket& s) { return wlink::pdmSource(s.micSource); }
+static const char* slotText(uint8_t slot) {
+    return slot == 0 ? "left slot" : slot == 1 ? "right slot" : "slot not decided yet";
+}
+
 static const char* filterText(uint8_t m) {
     return m == wlink::kFilterStrong ? "on, strong (20 dB)" : m == wlink::kFilterOff ? "off" : "on (12 dB)";
 }
@@ -696,11 +703,16 @@ static void reportRemoteChanges() {
     else if (!firstStatus && s.adapter == wlink::kAdapterNone) announcer::say(announcer::Event::AdapterRemoved);
     lastAdapter = s.adapter;
     strlcpy(lastName, s.name, sizeof(lastName));
-    if (s.board == wlink::kBoardAtomS3U) {  // no adapter: the AtomS3U's own microphone
+    if (s.micSource == wlink::kSrcAtomMic) {  // no adapter: the AtomS3U's own microphone
         if (s.adapter == wlink::kAdapterStreaming) logEvent("remote: AtomS3U, %s, streaming", s.name);
         else logEvent("remote: AtomS3U, %s", s.problem[0] ? s.problem : "microphone not running");
         if (!firstStatus || s.adapter != wlink::kAdapterStreaming)
             evText(0, "remote AtomS3U: %s", s.adapter == wlink::kAdapterStreaming ? "built-in microphone streaming" : s.problem);
+    } else if (pdmRemote(s)) {  // 1.4.9: a XIAO with a PDM microphone (no USB adapter)
+        if (s.adapter == wlink::kAdapterStreaming) logEvent("remote: %s, streaming", s.name);
+        else logEvent("remote: %s", s.problem[0] ? s.problem : "microphone not running");
+        if (!firstStatus || s.adapter != wlink::kAdapterStreaming)
+            evText(0, "remote: %s", s.adapter == wlink::kAdapterStreaming ? (String(s.name) + " streaming").c_str() : s.problem);
     } else if (s.adapter == wlink::kAdapterStreaming) {
         logEvent("remote adapter: %04x:%04x \"%s\" %u ch %u-bit, streaming", s.vid, s.pid, s.name, s.channels, s.bits);
         ev(evlog::kAdapterOk, s.channels, s.bits, uint32_t(s.vid) << 16 | s.pid);
@@ -1174,7 +1186,9 @@ static void renderStatus(evlog::Out& f) {
         portEXIT_CRITICAL(&linkMux);
         s.firmware[sizeof(s.firmware) - 1] = 0;
         s.name[sizeof(s.name) - 1] = 0;
-        f.printf("  board: %s%s\r\n", wlink::boardName(s.board), s.board == wlink::kBoardAtomS3U ? " (built-in microphone)" : "");
+        if (s.micSource == wlink::kSrcAtomMic) f.printf("  board: %s (built-in microphone)\r\n", wlink::boardName(s.board));
+        else if (pdmRemote(s)) f.printf("  board: %s (%s)\r\n", wlink::boardName(s.board), wlink::micSourceName(s.micSource));
+        else f.printf("  board: %s\r\n", wlink::boardName(s.board));
         f.printf("  firmware %s, RSSI %d dBm, tx power %s dBm, distance %s (%s)\r\n", s.firmware, rssi,
                  cfg::txPowerText(s.txPowerDbm), wlink::distanceName(s.distance), wlink::distanceRateText(s.distance, s.compression));
         f.printf("  mode: %s (%s)\r\n", s.audioMode == wlink::kModeSpeaker ? "speaker" : "microphone", modeReasonText(s.modeReason));
@@ -1191,7 +1205,8 @@ static void renderStatus(evlog::Out& f) {
         else
             f.printf("  processor %u MHz, chip temperature not read (the remote did not answer in time)\r\n",
                      unsigned(s.cpuMhz));
-        if (s.board == wlink::kBoardAtomS3U) f.printf("  microphone: %s %s\r\n", adapterText(s), s.name);
+        if (s.micSource == wlink::kSrcAtomMic) f.printf("  microphone: %s %s\r\n", adapterText(s), s.name);
+        else if (pdmRemote(s)) f.printf("  microphone: %s %s, PDM %s\r\n", adapterText(s), s.name, slotText(s.micSlot));
         else f.printf("  adapter: %s %s\r\n", adapterText(s), s.name);
         if (s.audioMode == wlink::kModeSpeaker) {
             f.printf("  noise filter, high-pass and low-pass: not used in speaker mode\r\n");
@@ -1205,12 +1220,12 @@ static void renderStatus(evlog::Out& f) {
             else f.printf("  high-pass filter: off\r\n");
             if (s.lowpassOn) f.printf("  low-pass filter: on, %u Hz\r\n", unsigned(s.lowpassHz));
             else f.printf("  low-pass filter: off\r\n");
-            if (s.board == wlink::kBoardAtomS3U) f.printf("  built-in mic: notch at 6857 Hz (the chip's own tone)\r\n");
+            if (s.micSource == wlink::kSrcAtomMic) f.printf("  built-in mic: notch at 6857 Hz (the chip's own tone)\r\n");
         }
         char lv[12];
         cfg::levelText(s.micLevel, lv, sizeof(lv));
         const char* what = s.audioMode == wlink::kModeSpeaker ? "speaker level" : "mic level";
-        if (s.hasLevel && s.board == wlink::kBoardAtomS3U)
+        if (s.hasLevel && pdmRemote(s))
             f.printf("  %s: %s%s -> gain %.1f dB (range %.1f to %.1f dB)\r\n", what, lv, s.micLevel <= 100 ? " %" : "",
                      s.levelNow / 256.0, s.levelMin / 256.0, s.levelMax / 256.0);
         else if (s.hasLevel)
@@ -1220,9 +1235,13 @@ static void renderStatus(evlog::Out& f) {
             f.printf("  %s: %s%s (this adapter has no level control)\r\n", what, lv, s.micLevel <= 100 ? " %" : "");
         else
             f.printf("  %s: %s%s\r\n", what, lv, s.micLevel <= 100 ? " %" : "");
-        if (s.noSignal) f.printf("  NO MICROPHONE SIGNAL: %s\r\n", s.board == wlink::kBoardAtomS3U
-                                       ? "the built-in microphone sends only silence" : "the adapter sends only silence (mic plug / jack?)");
-        if (s.board != wlink::kBoardAtomS3U) f.printf("  adapter details: adapter.txt\r\n");
+        if (s.noSignal) f.printf("  NO MICROPHONE SIGNAL: %s\r\n",
+                                 s.micSource == wlink::kSrcAtomMic ? "the built-in microphone sends only silence"
+                                 : s.micSource == wlink::kSrcExternalPdm
+                                     ? "the External PDM Microphone sends nothing (still plugged in? restart the remote after re-plugging)"
+                                 : pdmRemote(s) ? "the PDM microphone sends nothing"
+                                                : "the adapter sends only silence (mic plug / jack?)");
+        if (s.micSource != wlink::kSrcAtomMic) f.printf("  %s details: adapter.txt\r\n", pdmRemote(s) ? "microphone" : "adapter");
     }
     if (noiseWhy[0]) f.printf("  noise graph: none - %s\r\n", noiseWhy);
     else f.printf("  noise graph: noise.svg (also in report.html)\r\n");
@@ -1251,7 +1270,7 @@ static void renderNoiseSvg(noisesvg::Out& out) {
     s.name[sizeof(s.name) - 1] = 0;
     char title[96], line1[160], line2[200], lv[12], lvDb[40] = "";
     snprintf(title, sizeof(title), "Extender Mic %u - background noise learned by the remote's noise filter", board::micNumber(pairId));
-    const bool atom = s.board == wlink::kBoardAtomS3U;
+    const bool atom = pdmRemote(s);  // a PDM microphone (AtomS3U built-in, External PDM Microphone...): digital gain
     snprintf(line1, sizeof(line1), "learned over %s | %s: %s | drive opened at start %u, %s", evlog::Log::dur(noise.learnedS).s,
              atom ? "microphone" : "adapter", s.name[0] ? s.name : "?", eventLog.start(), evlog::Log::dur(upS()).s);
     cfg::levelText(s.micLevel, lv, sizeof(lv));
@@ -1326,26 +1345,82 @@ static void writeNotWritten(const char* path, const char* what) {
     logf("drive: %s did not fit on the drive", what);
 }
 
-// The remote in use is an AtomS3U (its latest status says so): it has no USB adapter.
-static bool remoteIsAtom(char* mac, size_t cap) {
+// The remote in use has a PDM microphone instead of a USB adapter (its latest status says
+// so): *s gets that status. (AtomS3U built-in; 1.4.9: External PDM Microphone, XIAO Sense, D2/D3.)
+static bool remotePdm(wlink::StatusPacket* s, char* mac, size_t cap) {
     if (!statusCount.load()) return false;
-    wlink::StatusPacket s;
     portENTER_CRITICAL(&linkMux);
-    memcpy(&s, &remoteStatus, sizeof(s));
+    memcpy(s, &remoteStatus, sizeof(*s));
     portEXIT_CRITICAL(&linkMux);
     strlcpy(mac, board::macText(remoteMac).c_str(), cap);
-    return s.board == wlink::kBoardAtomS3U;
+    return pdmRemote(*s);
+}
+
+// adapter.txt for a remote with a PDM microphone: which kind it found at start-up, and how it
+// reads it. The "PDM microphone type" line names the kind; the microphone part is known for the
+// External PDM Microphone board (IM73D122), the XIAO Sense and the AtomS3U, not for one wired to D2/D3.
+static void writePdmMicText(WriteFn w, void* c, const wlink::StatusPacket& s, const char* mac) {
+    char t[900];
+    if (s.micSource == wlink::kSrcAtomMic) {
+        snprintf(t, sizeof(t),
+                 "Wireless USB Audio Extender - the remote's audio adapter\r\n\r\n"
+                 "PDM microphone type: AtomS3U built-in microphone\r\n\r\n"
+                 "The remote (MAC %s) is an M5Stack AtomS3U: it uses its built-in microphone\r\n"
+                 "(SPM1423, PDM) and has no USB audio adapter. See status.txt for its microphone and gain.\r\n", mac);
+        w(c, t);
+        return;
+    }
+    const bool external = s.micSource == wlink::kSrcExternalPdm, sense = s.micSource == wlink::kSrcSensePdm;
+    const char* type = external ? "External PDM Microphone (board in the OTG adapter's USB-A socket)"
+                       : sense  ? "Internal PDM microphone - the XIAO ESP32-S3 Sense's built-in microphone"
+                                : "Internal PDM microphone - wired to the XIAO's D2/D3 pins";
+    const char* where = external
+        ? "  found at start-up in the OTG adapter's USB-A socket. It is not a USB device: the\r\n"
+          "  remote reads the microphone directly over the socket's data pins\r\n"
+          "  (USB D- = PDM clock, GPIO19; USB D+ = PDM data, GPIO20). Its USB host is not started.\r\n"
+        : sense
+        ? "  found at start-up on the Sense board (PDM clock GPIO42, data GPIO41).\r\n"
+          "  No USB audio adapter was plugged in, so the USB host is not started.\r\n"
+        : "  found at start-up on the XIAO's pins D3 (PDM clock, GPIO4) and D2 (PDM data, GPIO3).\r\n"
+          "  No USB audio adapter was plugged in, so the USB host is not started.\r\n";
+    const char* part = external ? "IM73D122 PDM MEMS microphone"
+                       : sense  ? "MSM261D3526H1CPM PDM MEMS microphone (on the Sense board)"
+                                : "PDM MEMS microphone (model not known to the remote)";
+    char slot[80];
+    if (s.micSlot == wlink::kSlotUnknown) snprintf(slot, sizeof(slot), "slot not decided yet");
+    else if (external)
+        snprintf(slot, sizeof(slot), "%s (jumper JP1 at %s)", slotText(s.micSlot), s.micSlot ? "R" : "L, as made");
+    else snprintf(slot, sizeof(slot), "%s", slotText(s.micSlot));
+    char lv[12];
+    cfg::levelText(s.micLevel, lv, sizeof(lv));
+    snprintf(t, sizeof(t),
+             "Wireless USB Audio Extender - the remote's audio adapter\r\n\r\n"
+             "PDM microphone type: %s\r\n\r\n"
+             "Result: %s\r\n"
+             "%s"
+             "  remote MAC %s, firmware %s\r\n\r\n"
+             "Microphone\r\n"
+             "  %s\r\n"
+             "  48000 Hz, 16-bit, mono, PDM %s\r\n"
+             "  gain (digital, in the remote): %.1f dB, mic_level %s%s (0-100 = 0 to +30 dB)\r\n"
+             "%s"
+             "\r\nTo use a USB audio adapter instead, %splug the adapter in and restart the remote\r\n"
+             "(it chooses its microphone only when it starts; a USB adapter comes first).\r\n",
+             type,
+             s.adapter == wlink::kAdapterStreaming ? "streaming"
+                                                   : (String("NOT USABLE - ") + (s.problem[0] ? s.problem : "not running")).c_str(),
+             where, mac, s.firmware, part, slot, s.levelNow / 256.0, lv, s.micLevel <= 100 ? " %" : "",
+             s.noSignal ? "  NO MICROPHONE SIGNAL: the microphone sends nothing (see status.txt)\r\n" : "",
+             external ? "unplug the microphone board, " : "");
+    w(c, t);
 }
 
 static void writeAdapterText(WriteFn w, void* c) {
     char mac[24];
-    if (remoteIsAtom(mac, sizeof(mac))) {  // never leave an older adapter's details to be taken for this remote's
-        char text[320];
-        snprintf(text, sizeof(text),
-                 "Wireless USB Audio Extender - the remote's audio adapter\r\n\r\n"
-                 "The remote (MAC %s) is an M5Stack AtomS3U: it uses its built-in microphone\r\n"
-                 "(SPM1423, PDM) and has no USB audio adapter. See status.txt for its microphone and gain.\r\n", mac);
-        w(c, text);
+    static wlink::StatusPacket ps;
+    if (remotePdm(&ps, mac, sizeof(mac))) {  // never leave an older adapter's details to be taken for this remote's
+        ps.name[sizeof(ps.name) - 1] = ps.problem[sizeof(ps.problem) - 1] = ps.firmware[sizeof(ps.firmware) - 1] = 0;
+        writePdmMicText(w, c, ps, mac);
         return;
     }
     char seen[120];

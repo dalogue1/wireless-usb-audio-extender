@@ -67,7 +67,7 @@ int main() {
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq), 4) == kInfoRequest);
     assert(check(reinterpret_cast<uint8_t*>(&rq), sizeof(rq) - 1, 4) == 0);
     // 1.3.6: the noise graph request and data; the version moved on (both boards must match).
-    static_assert(kVersion == 21, "protocol v21");  // 1.4.8: low-pass in config, ack and status
+    static_assert(kVersion == 22, "protocol v22");  // 1.4.9: micSource / micSlot in status
     // 1.4.6: the remote's radio backlog of audio stays shorter than the local's 150 ms buffer,
     // and a weak signal (reports still coming) no longer counts as a stuck transmitter at once.
     static_assert(kMaxAudioQueued * 12 < 150, "audio backlog under the 150 ms buffer");
@@ -135,6 +135,16 @@ int main() {
     printf("mono ADPCM packet %zu B\n", sizeof(ma));
     static_assert(sizeof(StatusPacket) <= kMaxPacket, "status fits");
     assert(strcmp(boardName(kBoardAtomS3U), "AtomS3U") == 0 && strcmp(boardName(kBoardXiao), "XIAO ESP32-S3") == 0);
+    // 1.4.9: microphone sources. Only the USB adapter is not PDM; the names appear in status.txt.
+    assert(!pdmSource(kSrcUsbAdapter) && pdmSource(kSrcAtomMic) && pdmSource(kSrcExternalPdm) && pdmSource(kSrcSensePdm) &&
+           pdmSource(kSrcPinPdm) && !pdmSource(kSrcPinPdm + 1));
+    assert(strcmp(micSourceName(kSrcExternalPdm), "External PDM Microphone") == 0);
+    assert(strcmp(micSourceName(99), "USB audio adapter") == 0);
+    {
+        StatusPacket st = {};
+        assert(st.micSource == kSrcUsbAdapter);  // a zeroed status means a USB adapter, as before 1.4.9
+        assert(offsetof(StatusPacket, micSlot) == sizeof(StatusPacket) - 1);
+    }
     printf("noise %zu B, beacon %zu B, config %zu B, status %zu B\n", sizeof(NoisePacket), sizeof(BeaconPacket),
            sizeof(ConfigPacket), sizeof(StatusPacket));
     assert(sizeof(NoisePacket) <= kMaxPacket && kNoiseBins == 257);

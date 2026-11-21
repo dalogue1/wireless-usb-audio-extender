@@ -140,6 +140,7 @@ inline const char* modeReasonText(uint8_t r) {
         case 4: return "microphone signal at start-up";
         case 5: return "no microphone signal at start-up";
         case 6: return "remote has built-in mic only";
+        case 7: return "remote uses a PDM microphone";
         default: return "not decided yet";
     }
 }

@@ -20,7 +20,7 @@
 namespace wlink {
 
 constexpr uint32_t kMagic = 0x314D5557;  // "WUM1" little-endian
-constexpr uint8_t kVersion = 21; // 1.4.8: low-pass filter (in config, ack and status); v20 = 1.4.7: audio_compression setting (in config, ack and status); v19 = 1.4.5: microphone audio ADPCM at far, mu-law at normal (v18: ADPCM at far only); v17 = 1.4.4: temperature only at start and drive opening (no 10-min reads); v16 = 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
+constexpr uint8_t kVersion = 22; // 1.4.9: PDM microphones on the XIAO remote (micSource, micSlot in status); v21 = 1.4.8: low-pass filter (in config, ack and status); v20 = 1.4.7: audio_compression setting (in config, ack and status); v19 = 1.4.5: microphone audio ADPCM at far, mu-law at normal (v18: ADPCM at far only); v17 = 1.4.4: temperature only at start and drive opening (no 10-min reads); v16 = 1.4.3: temperature snapshot when the drive opens; v15 = 1.4.2: stereo speaker mode (IMA ADPCM); v14 = 1.4.0: AtomS3U (board kind in status); v13 = 1.3.6: MAC pairing, distance, speaker mode, noise graph; v12 = 1.3.3: mic_level; v11 = 1.3.0: no jumpers, adapter details; v10 = 1.2.13: 3 blocks per audio packet, memory in status; v9 = 1.2.9: temperature on/off; v8 = 1.2.7: high-pass filter; v7 = 1.2.5:
                                   // temperature + cpu_mhz; v6 = 1.2.4: tx_power; v5 = 1.2.3: mic 1..9;
                                   // v4 = 1.2.2: silent-mic status; v3 = 1.2.0: config.txt
 
@@ -90,11 +90,33 @@ enum ModeReason : uint8_t {
     kReasonSignal = 4,        // auto: microphone signal heard at start-up
     kReasonSilence = 5,       // auto: pure digital silence at start-up (nothing in the mic jack)
     kReasonBuiltInMic = 6,    // the remote is an AtomS3U: built-in microphone only
+    kReasonPdmMic = 7,        // 1.4.9: the remote uses a PDM microphone (microphone only)
 };
 
 // Which board the remote runs on (StatusPacket.board), and the local board for its own log.
 enum BoardKind : uint8_t { kBoardXiao = 0, kBoardAtomS3U = 1 };
 inline const char* boardName(uint8_t b) { return b == kBoardAtomS3U ? "AtomS3U" : "XIAO ESP32-S3"; }
+
+// 1.4.9: where the remote's microphone audio comes from (StatusPacket.micSource). The remote
+// decides once at start-up (AudioExtender_Remote/MicDetect.h).
+enum MicSource : uint8_t {
+    kSrcUsbAdapter = 0,   // a USB audio adapter on the OTG port (or none yet)
+    kSrcAtomMic = 1,      // the AtomS3U's built-in PDM microphone (SPM1423)
+    kSrcExternalPdm = 2,  // the External PDM Microphone board in the OTG adapter's USB-A socket
+    kSrcSensePdm = 3,     // the XIAO ESP32-S3 Sense's built-in PDM microphone
+    kSrcPinPdm = 4,       // a PDM microphone wired to the XIAO's D3 (clock) / D2 (data)
+};
+inline bool pdmSource(uint8_t s) { return s >= kSrcAtomMic && s <= kSrcPinPdm; }
+inline const char* micSourceName(uint8_t s) {
+    switch (s) {
+        case kSrcAtomMic: return "AtomS3U built-in microphone";
+        case kSrcExternalPdm: return "External PDM Microphone";
+        case kSrcSensePdm: return "XIAO Sense built-in microphone";
+        case kSrcPinPdm: return "PDM microphone on D2/D3";
+        default: return "USB audio adapter";
+    }
+}
+constexpr uint8_t kSlotUnknown = 0xFF;  // StatusPacket.micSlot: not decided yet
 
 // config.txt `distance`: the radio rate of the paired link (the further, the slower).
 enum Distance : uint8_t { kDistanceNormal = 0, kDistanceNear = 1, kDistanceFar = 2 };
@@ -283,6 +305,8 @@ struct __attribute__((packed)) StatusPacket {
     uint8_t compression;    // 1.4.7: Compression setting in effect (audio_compression)
     uint8_t lowpassOn;      // 1.4.8: low-pass filter in effect
     uint16_t lowpassHz;     // its cut-off
+    uint8_t micSource;      // 1.4.9: MicSource in use
+    uint8_t micSlot;        // 1.4.9: PDM microphone: 0 left, 1 right slot (SELECT pin), kSlotUnknown
 };
 
 // Settings the local board wants the remote to use. newPairId/newChannel differ from
