@@ -27,11 +27,11 @@ It is not a USB device: there is no USB chip and no USB protocol. The plug's fou
 
 | Ref | Part | Package | Notes |
 |---|---|---|---|
-| J1 | Molex 48037-2200 USB-A plug | surface mount + 2 shell tabs, top | DigiKey WM3983CT-ND, also Mouser, RS, Farnell. Other USB-A plugs don't fit: their pads differ |
-| U1 | XC6206P332PR 3.3 V regulator | SOT-89, back | LCSC C545581 or C41322, DigiKey 4518-XC6206P332PRCT-ND. Check a copy's pinout: 1 GND, 2 IN (and tab), 3 OUT |
-| C1, C2 | 1 µF ceramic, X5R/X7R, 10 V or more | 0805, back | C1 input, C2 output |
-| R1 | 0 Ω (or 33–100 Ω) | 0805, back | in the DATA line. **Must be fitted**: without it the mic isn't connected |
-| R2 | 0 Ω (or 33–100 Ω) | 0805, back | in the CLK line. **Must be fitted** |
+| J1 | Molex 48037-2200 USB-A plug | surface mount + 2 shell tabs, top | DigiKey [WM3983CT-ND](https://www.digikey.com/en/products/detail/molex/0480372200/2421361), also Mouser, RS, Farnell. Other USB-A plugs don't fit: their pads differ |
+| U1 | XC6206P332PR 3.3 V regulator | SOT-89, back | LCSC C545581 or C41322, DigiKey [4518-XC6206P332PRCT-ND](https://www.digikey.com/en/products/detail/umw/XC6206P332PR/17635244) (UMW). Check a copy's pinout: 1 GND, 2 IN (and tab), 3 OUT |
+| C1, C2 | 1 µF ceramic, X5R/X7R, 10 V or more | 0805, back | C1 input, C2 output. E.g. Samsung CL21B105KAFNNNE (1 µF 25 V X7R), DigiKey [1276-1066-1-ND](https://www.digikey.com/en/products/detail/samsung-electro-mechanics/CL21B105KAFNNNE/3886724) |
+| R1 | 0 Ω (or 33–100 Ω) | 0805, back | in the DATA line. **Must be fitted**: without it the mic isn't connected. 0 Ω: Yageo RC0805JR-070RL, DigiKey [311-0.0ARCT-ND](https://www.digikey.com/en/products/detail/yageo/RC0805JR-070RL/728216) |
+| R2 | 0 Ω (or 33–100 Ω) | 0805, back | in the CLK line. **Must be fitted**. 0 Ω: same as R1 |
 | JP1 | solder jumper (no part) | back | channel: L as made, or R |
 | U2 | IM73D122 mic module, 15.5 mm round ([Amazon](https://www.amazon.com/dp/B0HK84XMMY)) | 2 × 3 pins on 2.5 mm headers, top | mic port facing up |
 
