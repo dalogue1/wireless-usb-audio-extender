@@ -26,6 +26,7 @@
 | Fast blink, "Adapter not supported" | `adapter.txt` says why: usually a USB Audio Class 2-only adapter, or no 48 kHz. |
 | Audio drops out | Signal strength and lost audio in `report.html`; try [`distance`](distance.md), the antenna placement, or another `channel`. Another extender pair on the **same channel** is a common cause: give each pair its own ([Pairing](pairing.md#several-mics)). |
 | BirdNET-Go: "No audio sources available" after replugging | Restart its container, or reboot the computer ([below](#restarting-your-software)). |
+| BirdNET-Go with two or more mics: one mic silent or missing after an update, or after adding or removing any USB mic | Remove all the USB mics in BirdNET-Go and add them all again ([below](#birdnet-go-with-two-or-more-mics)). |
 | A board seems stuck | Both recover by themselves (below). If in doubt, send `report.html` and `events.txt` from the [drive](extender-drive.md). |
 
 ### Microphone plugs
@@ -51,6 +52,12 @@ Afterwards, restart the container in one of these ways:
 * **Reboot** the computer.
 
 Other recording software may need the same: if audio doesn't come back after a replug, restart it.
+
+### BirdNET-Go with two or more mics
+
+BirdNET-Go remembers each sound card by its number (card 0, card 1, ...), not by its name. With two or more USB microphones, the computer numbers them in the order they start up, and that order can change: typically after one of the local boards is updated, since its start-up time changes slightly. BirdNET-Go then finds the wrong card, or none, for a mic, and a reboot doesn't help.
+
+Fix it in BirdNET-Go's settings: remove **all** the USB mics from the audio sources and add them all again, choosing each one by name ("Extender Mic 2, USB Audio"). Re-adding only the mic that stopped working isn't enough: the numbers of the others may have changed too, so after the next reboot a different mic can go missing. Do the same after adding or removing any USB mic, an extender or any other kind, since that changes the numbers too. The numbers then stay the same until the next update or change in the number of mics.
 
 ## Automatic recovery
 
