@@ -63,15 +63,6 @@ Use 0 Ω for R1 and R2 unless a long USB extension gives clicks or noise bursts;
 
 **Channel jumper JP1.** As made, JP1 connects the mic's SEL pin to ground (left channel). The firmware finds the mic on either channel, so there is normally no reason to change it. To switch to the right channel, cut the thin link between the L pad and the middle pad, then bridge the middle pad to the R pad with solder. `adapter.txt` shows which channel the remote found and the JP1 setting that goes with it.
 
-### Mic height
-
-The mic's centre sits about 1.24 mm above the USB board's top surface, about 1 mm below the USB plug's centre line. A right-angle header's pin row always sits about 1.25–1.4 mm above the board, so it can't go lower. The case below allows for this. Two optional ways to bring the mic closer to the plug's centre line:
-
-* order the USB board **0.8 mm** thick instead of 1.6 mm (about 0.8 mm closer). J1 is made for 1.6 mm boards, so check its tabs still hold;
-* slide J2's plastic spacer off the pins after soldering (about 0.6 mm), if the pins are held firmly enough without it.
-
-Neither is needed for the board to work, and the case is sized for the standard build.
-
 ## Case
 
 A 3D-printed tube case: the USB end is a rounded rectangle that blends into a round end, 20.4 mm across and centred on the mic, 26.1 mm long. It looks like a small microphone, and a standard foam windscreen (about 18–20 mm inside diameter) fits over the round end.
