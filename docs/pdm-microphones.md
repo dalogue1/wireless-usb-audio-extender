@@ -10,7 +10,7 @@ Everything after the microphone stays the same: the radio link, the local board,
 
 | Type | What it is | Soldering |
 |---|---|---|
-| **External PDM Microphone** | A small board with an IM73D122 mic and a USB-A plug. It plugs into the OTG adapter in place of the USB audio adapter. | Assemble the board once (or get one ready-made) |
+| **External PDM Microphone** | A small USB-A plug board with an IM73D122 mic board standing on its back edge. It plugs into the OTG adapter in place of the USB audio adapter. | Assemble the board once (or get one ready-made) |
 | **XIAO Sense built-in microphone** | The mic on the XIAO ESP32-S3 Sense's camera board (MSM261D3526H1CPM, SNR 64 dB(A)) | None: use a XIAO ESP32-S3 **Sense** as the remote |
 | **A PDM mic on D2/D3** | Any 3.3 V PDM mic module wired to the XIAO: clock to **D3**, data to **D2**, plus 3V3 and GND | Yes |
 | AtomS3U built-in microphone | See [AtomS3U boards](atoms3u.md) | None |
