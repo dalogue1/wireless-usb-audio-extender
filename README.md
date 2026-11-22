@@ -68,7 +68,7 @@ Snap the antennas on before powering the boards, keep the local board's antenna 
 * **[Voice feedback](docs/voice-feedback.md)**: the spoken announcements, other languages, your own voice
 * **[LEDs and troubleshooting](docs/troubleshooting.md)**: what the lights mean, common problems, recovery, the serial log
 * **[Building your own microphone](docs/diy-microphone.md)**: a capsule on a cable, wiring for TRRS and TRS plugs
-* **[PDM microphones](docs/pdm-microphones.md)**: digital mics instead of a USB audio adapter, found automatically, including the External PDM Microphone board
+* **[PDM microphones](docs/pdm-microphones.md)**: digital mics instead of a USB audio adapter, found automatically
 * **[AtomS3U boards](docs/atoms3u.md)**: an even simpler extender from USB-stick-sized boards with a built-in mic
 * **[Building from source](docs/building.md)**: Arduino IDE settings, firmware images, tests, how it works
 * **[Acknowledgements](docs/acknowledgements.md)**: esp32-birdnet-mic and the other projects this builds on
