@@ -8,7 +8,7 @@ Source: `AudioExtender_Remote/NoiseSignature.h` (the engine, plain C++, no Ardui
 
 ## Where it sits
 
-![The remote's audio path: USB audio adapter, USB host driver, int16 blocks (also read by the level meter LED and the no-signal check), high-pass filter, noise filter, 12 ms radio packet, encoded by distance, ESP-NOW to the local board](images/remote-audio-path.svg)
+![The remote's audio path: USB audio adapter, USB host driver, int16 blocks (also read by the level meter LED and the no-signal check), high-pass filter, low-pass filter (off by default), noise filter, 12 ms radio packet, encoded by distance, ESP-NOW to the local board](images/remote-audio-path.svg)
 
 * The level meter and the no-signal check see the audio **as captured**, before the filter.
 * A **high-pass filter** (`shared/HighPass.h`: 2nd-order Butterworth, float, default on at 200 Hz) runs first, so the noise filter's reduction is not spent on rumble below the cut-off. Changing it is not a reason to relearn: the noise floor below the cut-off simply drops and the tracker follows within one tracker window.
