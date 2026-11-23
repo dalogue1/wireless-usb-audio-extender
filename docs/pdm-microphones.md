@@ -2,7 +2,7 @@
 
 [← Back to the main page](../README.md)
 
-Since 1.4.9, a XIAO ESP32-S3 remote can take its audio from a **PDM microphone** instead of a USB audio adapter. A PDM (pulse-density modulation) microphone is a MEMS mic with a digital output: the remote sends it a clock and reads its bit stream directly. There is no adapter, no 3.5 mm plug and no analog wiring to pick up hum.
+Since 1.4.9, a XIAO ESP32-S3 remote can take its audio from a **PDM microphone** instead of a USB audio adapter. A PDM (pulse-density modulation) microphone is a MEMS mic with a digital output: the remote sends it a clock and reads its bit stream directly. It needs no USB audio adapter and no 3.5 mm plug, which makes it simpler to build, but it is not quieter: the analog capsule in the main build (AOM5024, SNR 80 dB) has a lower noise floor than any of these PDM mics.
 
 Everything after the microphone stays the same: the radio link, the local board, "Extender Mic N" on the PC, the filters, `config.txt` and the EXTENDER drive.
 
