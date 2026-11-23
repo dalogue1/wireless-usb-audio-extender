@@ -21,6 +21,13 @@ Wireless USB Audio Extender 1.4.9-dev  (radio protocol v22: update both boards)
 - status.txt names the microphone and its PDM slot; adapter.txt describes the PDM microphone
   (e.g. "External PDM Microphone", IM73D122, 48 kHz, left slot, JP1, gain) instead of
   adapter descriptors. New status fields micSource / micSlot (protocol v22).
+- Stereo USB microphones and adapters (48 kHz stereo, 192-200 byte packets), e.g. the Blue
+  Yeti: refused before with "could not claim the audio interface". The core's USB host is
+  built with its FIFO biased towards periodic OUT, which caps IN packets at 128 bytes. The
+  remote now sets its own FIFO split (UsbMic.cpp libTaskFn): IN packets up to 340 bytes,
+  speaker packets up to 352 bytes. The left channel of a stereo microphone is used.
+  A packet size the USB host still can't take is reported as "packets too large for the
+  USB host (N bytes)"; the log gives the ESP-IDF error of any failed claim.
 
 Also in this build (from 1.4.8-dev):
 - New config.txt settings: lowpass = off | on, lowpass_hz = 12000 (2000-20000 Hz).

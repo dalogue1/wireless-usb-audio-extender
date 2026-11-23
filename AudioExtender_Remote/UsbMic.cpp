@@ -363,9 +363,18 @@ void openDevice(uint8_t addr) {
         usbLog("USB device %04x:%04x \"%s\" not used: %s", st.vid, st.pid, st.name, why);
         return; // kept open (unused) so its removal is reported
     }
-    if (usb_host_interface_claim(client, dev, cap.streamInterface, cap.alt) != ESP_OK) {
-        setProblem("could not claim the audio interface");
-        usbLog("USB audio: claiming interface %u alt %u failed", cap.streamInterface, cap.alt);
+    const esp_err_t claimErr = usb_host_interface_claim(client, dev, cap.streamInterface, cap.alt);
+    if (claimErr != ESP_OK) {
+        // ESP_ERR_NOT_SUPPORTED: the endpoint's packets don't fit the USB host's FIFO
+        // (see libTaskFn). Kept under 48 characters: it travels in the status packet.
+        char msg[48];
+        if (claimErr == ESP_ERR_NOT_SUPPORTED)
+            snprintf(msg, sizeof(msg), "packets too large for the USB host (%u bytes)", unsigned(cap.maxPacket));
+        else
+            snprintf(msg, sizeof(msg), "could not claim the audio interface");
+        setProblem(msg);
+        usbLog("USB audio: claiming interface %u alt %u failed: %s", cap.streamInterface, cap.alt,
+               esp_err_to_name(claimErr));
         return; // kept open (unused) so its removal is reported
     }
     ifClaimed = true;
@@ -559,6 +568,18 @@ void libTaskFn(void*) {
 #if CONFIG_USB_HOST_ENABLE_ENUM_FILTER_CALLBACK
     hc.enum_filter_cb = acceptAllDevices;
 #endif
+    // The core's ESP-IDF is built with CONFIG_USB_HOST_HW_BUFFER_BIAS_PERIODIC_OUT:
+    // only 35 RX FIFO lines, so any IN endpoint over 128 bytes is refused when its
+    // interface is claimed ("EP MPS (200) exceeds supported limit (128)"). That shuts
+    // out every 48 kHz stereo microphone (192-200 byte packets), e.g. the Blue Yeti.
+    // The S3 has 200 FIFO lines of 4 bytes; split 192 of them (all buffers on
+    // the root port, sized as (MPS / 4) + 3 status lines for RX):
+    //   control/bulk OUT 16 lines: 64 bytes (control endpoints, as before)
+    //   RX (all IN)      88 lines: IN packets up to 340 bytes (stereo 24-bit 48 kHz = 288)
+    //   periodic OUT     88 lines: speaker packets up to 352 bytes
+    hc.fifo_settings_custom.nptx_fifo_lines = 16;
+    hc.fifo_settings_custom.rx_fifo_lines = 88;
+    hc.fifo_settings_custom.ptx_fifo_lines = 88;
     installOk = usb_host_install(&hc) == ESP_OK;
     xSemaphoreGive(installed);
     if (!installOk) { libTask = nullptr; vTaskDelete(nullptr); }
