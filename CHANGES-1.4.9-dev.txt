@@ -55,3 +55,6 @@ Also in this build (from 1.4.7-dev):
   The packet check (wlink::check in LinkProtocol.h) had no case for kTempRequest, so the
   remote dropped every request ("asked 8 times, no answer in 8 s" in status.txt, 1.4.6+).
   Fixed; a host test now checks that every packet type is accepted.
+  Second fault behind it: the remote cleared its new reading at once (the age was taken from
+  the loop's start time, older than the reading, and wrapped round), so the local board never
+  saw it and kept asking. Ages now come from millis().

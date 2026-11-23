@@ -1396,7 +1396,9 @@ void loop() {
     decideMode();
     reportRejected();
     // Temperature (1.4.4): only when the local board's drive opens; the audio has stopped.
-    if (tempRequested.exchange(false) && (!tempSnapshotMs || now - tempSnapshotMs > 5000)) {
+    // 1.4.9: ages are taken from millis(), not 'now': the snapshot is newer than 'now' (taken at
+    // the top of the loop), so now - tempSnapshotMs wrapped round and cleared it at once.
+    if (tempRequested.exchange(false) && (!tempSnapshotMs || millis() - tempSnapshotMs > 5000)) {
         int16_t t;
         if (readTempRadioPaused(&t)) {
             chipTemp = t;
@@ -1407,7 +1409,7 @@ void loop() {
             logf("chip temperature not read: the radio was too busy to pause (drive opening)");
         }
     }
-    if (tempSnapshotMs && now - tempSnapshotMs > wlink::kTempSnapshotKeepMs) tempSnapshotMs = 0;
+    if (tempSnapshotMs && millis() - tempSnapshotMs > wlink::kTempSnapshotKeepMs) tempSnapshotMs = 0;
     // 1.4.6: once a minute at most, how much audio was skipped with the radio backed up.
     static uint32_t skipLogMs = 0, skipLogged = 0;
     if (now - skipLogMs >= 60000) {
