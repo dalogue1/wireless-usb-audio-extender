@@ -93,5 +93,5 @@ Every 10 s a stats line: **lost** = audio packets that never arrived (12 ms of s
 ## Limits
 
 * USB Audio Class 1 adapters only, with 48 kHz. "Hi-Res" USB Audio Class 2-only adapters are refused.
-* One adapter per remote (no USB hub). The microphone is one channel (mono): a stereo USB microphone or adapter, such as a Blue Yeti, works, and its left channel is used. Speaker mode is stereo.
+* One adapter per remote (no USB hub). The microphone is one channel (mono): a stereo USB microphone or adapter, such as a Logitech Blue Yeti, works, and its left channel is used. Speaker mode is stereo.
 * One direction at a time: microphone or speaker.

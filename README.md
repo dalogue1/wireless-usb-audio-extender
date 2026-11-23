@@ -42,6 +42,7 @@ Only the two XIAO ESP32-S3 boards are required. The links are examples, not reco
 * **Boards:** an ESP32-**S3** (not the C3, C5 or C6). Its antenna is required.
 * **OTG splitter:** USB-C OTG with a separate charging input, so the remote and the adapter get power.
 * **Audio adapter:** **USB Audio Class 1**. Few listings say so, but one that names **Nintendo Switch or PS5** support is a good sign.
+* **USB microphone instead:** a USB microphone that is USB Audio Class 1 can replace the adapter and microphone; from a stereo one the left channel is used. Tested: Logitech Blue Yeti.
 * **Microphone:** its plug must match the adapter's jack: **TRRS** (one combined headset jack) with TRRS, **TRS** (separate pink mic jack) with TRS. A mismatch gives silence. If you like soldering, you can [build your own](docs/diy-microphone.md) from a microphone capsule.
 * **Data cable:** it must carry **data**, not just charge. It flashes both boards, then connects the local board to the computer.
 * **Power supply:** 5 V, 1 A or more, with a USB-C plug for the splitter's charging input.
