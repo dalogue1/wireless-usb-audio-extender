@@ -75,6 +75,24 @@ int main() {
     Header nr;
     fill(nr, kNoiseRequest, 3);
     assert(check(reinterpret_cast<uint8_t*>(&nr), sizeof(nr), 3) == kNoiseRequest);
+    Header tr;  // 1.4.9: kTempRequest was missing from check() (header-only, like kNoiseRequest)
+    fill(tr, kTempRequest, 3);
+    assert(check(reinterpret_cast<uint8_t*>(&tr), sizeof(tr), 3) == kTempRequest);
+    // Every type in the enum is accepted by check() at its full packet size: a new type
+    // without a case is dropped by the receiver (default: 0).
+    {
+        uint8_t buf[kMaxPacket] = {};
+        for (uint8_t t = kBeacon; t <= kMonoMulaw; ++t) {
+            Header* hh = reinterpret_cast<Header*>(buf);
+            fill(*hh, Type(t), 3);
+            if (t == kAudio) reinterpret_cast<AudioPacket*>(buf)->samples = kPacketSamples;
+            if (t == kMonoMulaw) reinterpret_cast<MonoMulawPacket*>(buf)->frames = kPacketSamples;
+            if (t == kMonoAdpcm) reinterpret_cast<MonoAdpcmPacket*>(buf)->frames = kPacketSamples;
+            if (t == kStereoAudio) reinterpret_cast<StereoAudioPacket*>(buf)->frames = kPacketSamples;
+            if (check(buf, sizeof(buf), 3) != t) { fprintf(stderr, "check() rejects type %u\n", t); assert(false); }
+            memset(buf, 0, sizeof(buf));
+        }
+    }
     NoisePacket np = {};
     fill(np.h, kNoiseData, 3);
     assert(check(reinterpret_cast<uint8_t*>(&np), sizeof(np), 3) == kNoiseData);

@@ -413,6 +413,7 @@ inline uint8_t check(const uint8_t* data, int len, uint8_t pairId) {
             return len >= (int)sizeof(BeaconPacket) ? h->type : 0;
         case kHello:
         case kNoiseRequest:
+        case kTempRequest:  // 1.4.9: was missing, so the remote dropped every temperature request
             return h->type;
         case kNoiseData:
             return len >= (int)sizeof(NoisePacket) ? h->type : 0;

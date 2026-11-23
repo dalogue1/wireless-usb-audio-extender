@@ -51,3 +51,7 @@ Also in this build (from 1.4.7-dev):
 - At most 8 audio packets (96 ms) wait in the remote's radio; newer audio is skipped
   (counted as lost) rather than queueing audio that would arrive too late.
 - Drive opening waits up to 8 s for the remote's temperature and logs why if none came.
+- Remote chip temperature as the drive opens: never worked since it was added in 1.4.3.
+  The packet check (wlink::check in LinkProtocol.h) had no case for kTempRequest, so the
+  remote dropped every request ("asked 8 times, no answer in 8 s" in status.txt, 1.4.6+).
+  Fixed; a host test now checks that every packet type is accepted.
